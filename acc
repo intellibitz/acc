@@ -95,7 +95,7 @@ for arg in "$@"; do [[ "$arg" == --method=* ]] && METHOD="${arg#--method=}"; don
 
 case "$1" in
     setup) setup_env ;;
-    up) [ -f "$LOCK_FILE" ] && { log "Busy."; exit 1; }; touch "$LOCK_FILE"; $PROVISIONER maintain --method "$METHOD"; rm "$LOCK_FILE" ;;
+    up) [ -f "$LOCK_FILE" ] && { log "Busy."; exit 1; }; touch "$LOCK_FILE"; $PROVISIONER maintain "$2" --method "$METHOD"; rm "$LOCK_FILE" ;;
     dash) cleanup_dash; python3 "$PROJECT_ROOT/tooling/tui_dashboard.py" ;;
     status) $OSM status ;;
     sync) $OSM sync ;;

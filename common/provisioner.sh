@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================================
-# acc EXPERT LIFECYCLE CONTROLLER (V65 - SELF-HEALING & PRUNING)
+# acc EXPERT LIFECYCLE CONTROLLER (V66 - USER-DRIVEN PROVISIONING)
 # ==============================================================================
 
 CORE_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -96,7 +96,12 @@ provision_model() {
 
     local final_gguf="$model_dl_dir/model.gguf"
     local found_file=$(find "$model_dl_dir" -name "*.gguf" | head -n 1)
-    if [[ -z "$found_file" ]]; then merge_gguf "$model_dl_dir" "$final_gguf"; found_file="$final_gguf"; fi
+    if [[ -z "$found_file" ]]; then merge_gguf "$model_dl_dir" "$final_gguf"; found_file=$(find "$model_dl_dir" -name "*.gguf" | head -n 1); fi
+
+    if [[ -z "$found_file" || ! -f "$found_file" ]]; then
+        log "[ERROR] No GGUF file found for $target_name after download/merge."
+        return 1
+    fi
 
     local gpu_layers=$(calculate_gpu_layers "$target_name"); local threads=$(nproc --ignore=4)
     local user_params=$(get_model_params "$target_name")
@@ -209,12 +214,35 @@ tune_model() {
     log "[SUCCESS] Parameters updated for $name. Please run 'acc up' to apply."
 }
 
+provision_fleet() {
+    local filter=$1
+    for entry in "${ALL_MODELS[@]}"; do
+        IFS='|' read -r provider name rest <<< "$(echo "$entry" | tr -d '\r')"
+        # If entry doesn't have provider, name is the first part
+        if [[ "$provider" != "ollama" && "$provider" != "localai" && "$provider" != "vllm" ]]; then
+            name=$provider
+        fi
+
+        if [[ -n "$filter" ]]; then
+            if [[ "$name" != "$filter" ]]; then continue; fi
+        fi
+        provision_model "$entry"
+    done
+}
+
 # Parse args
+FILTER_NAME=""
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         --method) DL_METHOD="$2"; shift ;;
         --private) IS_PRIVATE="true" ;;
-        maintain|provision|fitness|prune|backup|auto-scale) CMD="$1" ;;
+        maintain|provision|fitness|prune|backup|auto-scale)
+            CMD="$1"
+            if [[ -n "$2" && "$2" != --* ]]; then
+                FILTER_NAME="$2"
+                shift
+            fi
+            ;;
         search) CMD="search"; QUERY="$2"; shift ;;
         add) CMD="add"; ENTRY="$2"; shift ;;
         remove) CMD="remove"; NAME="$2"; shift ;;
@@ -224,7 +252,7 @@ while [[ "$#" -gt 0 ]]; do
 done
 
 case "$CMD" in
-    maintain) for entry in "${ALL_MODELS[@]}"; do provision_model "$entry"; done ;;
+    maintain) provision_fleet "$FILTER_NAME" ;;
     search) search_hf "$QUERY" ;;
     add)
         if [ "$IS_PRIVATE" == "true" ]; then
@@ -238,5 +266,5 @@ case "$CMD" in
     prune) prune_fleet ;;
     backup) backup_config ;;
     auto-scale) auto_scale ;;
-    *) echo "Usage: provisioner {maintain|search|add|remove|tune-model|prune|backup|auto-scale}"; exit 1 ;;
+    *) echo "Usage: provisioner {maintain [model]|search|add|remove|tune-model|prune|backup|auto-scale}"; exit 1 ;;
 esac

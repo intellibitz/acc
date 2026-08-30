@@ -79,7 +79,7 @@ fun App() {
                         
                         // Right: System Stats & Fleet
                         Box(modifier = Modifier.width(300.dp).fillMaxHeight().padding(8.dp)) {
-                            SystemPanel(systemState)
+                            SystemPanel(systemState, onCommand = { consoleVm.runCommand(it) })
                         }
                     }
                     
@@ -208,7 +208,7 @@ fun ConsoleView(lines: List<ConsoleLine>) {
 }
 
 @Composable
-fun SystemPanel(state: SystemState?) {
+fun SystemPanel(state: SystemState?, onCommand: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("HARDWARE STATUS", style = MaterialTheme.typography.labelLarge, color = Color.Gray)
         
@@ -229,7 +229,7 @@ fun SystemPanel(state: SystemState?) {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(0.6f)) {
             state?.fleet?.let { fleet ->
                 items(fleet) { model ->
-                    FleetItem(model)
+                    FleetItem(model, onProvision = { onCommand("up $it") })
                 }
             }
         }
@@ -242,7 +242,7 @@ fun SystemPanel(state: SystemState?) {
             }
             LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(0.4f)) {
                 items(partials) { name ->
-                    PartialDownloadItem(name)
+                    PartialDownloadItem(name, onResume = { onCommand("up $it") })
                 }
             }
         }
@@ -250,7 +250,7 @@ fun SystemPanel(state: SystemState?) {
 }
 
 @Composable
-fun PartialDownloadItem(name: String) {
+fun PartialDownloadItem(name: String, onResume: (String) -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
@@ -258,6 +258,14 @@ fun PartialDownloadItem(name: String) {
         Icon(Icons.Default.Pending, null, tint = Color.Yellow, modifier = Modifier.size(14.dp))
         Spacer(modifier = Modifier.width(8.dp))
         Text(name, fontSize = 11.sp, color = Color.White, modifier = Modifier.weight(1f))
+        
+        IconButton(
+            onClick = { onResume(name) },
+            modifier = Modifier.size(24.dp)
+        ) {
+            Icon(Icons.Default.PlayArrow, null, tint = Color.Yellow, modifier = Modifier.size(16.dp))
+        }
+        
         Text("PARTIAL", fontSize = 9.sp, color = Color.Yellow)
     }
 }
@@ -279,16 +287,25 @@ fun StatItem(label: String, value: String, progress: Float) {
 }
 
 @Composable
-fun FleetItem(model: ModelStatus) {
+fun FleetItem(model: ModelStatus, onProvision: (String) -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
     ) {
         Box(modifier = Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(if (model.isRunning) Color.Green else Color.DarkGray))
         Spacer(modifier = Modifier.width(8.dp))
-        Text(model.name, fontSize = 12.sp, color = if (model.isInstalled) Color.White else Color.Gray)
-        Spacer(modifier = Modifier.weight(1f))
-        Text(model.type, fontSize = 10.sp, color = if (model.type == "PRIV") Color.Magenta else Color.Cyan)
+        Text(model.name, fontSize = 12.sp, color = if (model.isInstalled) Color.White else Color.Gray, modifier = Modifier.weight(1f))
+        
+        if (!model.isInstalled) {
+            IconButton(
+                onClick = { onProvision(model.name) },
+                modifier = Modifier.size(24.dp)
+            ) {
+                Icon(Icons.Default.Download, null, tint = Color.Green, modifier = Modifier.size(16.dp))
+            }
+        }
+        
+        Text(model.type, fontSize = 10.sp, color = if (model.type == "PRIV") Color.Magenta else Color.Cyan, modifier = Modifier.padding(start = 4.dp))
     }
 }
 
