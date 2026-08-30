@@ -13,10 +13,11 @@ Run any open-source model—from Phi-3 to Llama 3.1 70B—with a single command.
 ## 🌟 Vision: Zero Effort, Infinite Intelligence
 ACC is designed for the developer who wants to *use* AI, not fight with dependencies.
 - **Master Orchestrator**: Just type `acc` to start.
-- **Visual Dashboard**: Real-time TUI tracking CPU, RAM, and NVIDIA GPU metrics.
+- **Visual Dashboard**: Real-time TUI tracking CPU, RAM, and NVIDIA GPU metrics (Temp/Power).
 - **Backend Agnostic**: Native support for **Ollama**, **LocalAI**, and **vLLM** via LiteLLM abstraction.
 - **Smart Provisioning**: Resilient multi-connection downloads (Aria2/HF-CLI) with automated reassembly.
 - **Elite Tuning**: Automated kernel and driver optimization for maximum tokens-per-second.
+- **Autonomous Intelligence**: Built-in "Architect" agents and interactive chat for instant reasoning.
 
 ---
 
@@ -24,7 +25,7 @@ ACC is designed for the developer who wants to *use* AI, not fight with dependen
 
 ```bash
 # 1. Clone the cockpit
-git clone https://github.com/your-username/acc.git
+git clone https://github.com/intellibitz/acc.git
 cd acc
 
 # 2. Install & Link
@@ -42,11 +43,15 @@ The visual dashboard provides a centralized hub for your entire fleet:
 | Key | Action | Logic |
 | :--- | :--- | :--- |
 | **`1`** | **Provision** | Auto-download and optimize the latest fleet models. |
-| **`S`** | **HF Search** | Discovery models directly from Hugging Face. |
+| **`V`** | **Sync** | Synchronize service configurations and model manifests. |
+| **`Z`** | **Auto-Scale** | Hardware-aware fleet optimization based on VRAM/RAM. |
+| **`J`** | **Benchmark** | Track TPS (Tokens/Sec) and TTFT (Time to First Token). |
+| **`W`** | **Chat** | Launch an interactive side-by-side chat session with any model. |
 | **`Y`** | **Proxy** | Start the LiteLLM gateway for OpenAI-compatible API access. |
-| **`G`** | **Agent** | Launch the Autonomous Architect AI agent. |
-| **`T`** | **Tune HW** | Apply low-level Linux kernel optimizations for AI. |
-| **`M`** | **Method** | Toggle between HF-Transfer, Aria2, or Native Pull. |
+| **`G`** | **Agent** | Launch the Autonomous Architect AI lead agent. |
+| **`T`** | **Tune HW** | Apply low-level Linux kernel optimizations for AI performance. |
+| **`S`** | **HF Search** | Discovery models directly from Hugging Face. |
+| **`A`** | **Add** | Add a new model to your managed fleet string. |
 
 ---
 
