@@ -39,6 +39,7 @@ setup_env() {
     fi
 
     log "Verifying Python dependencies..."
+    pip install -r "$PROJECT_ROOT/requirements.txt" --quiet --break-system-packages 2>/dev/null || \
     pip install -r "$PROJECT_ROOT/requirements.txt" --quiet
 
     mkdir -p "$PROJECT_ROOT/logs" "$PROJECT_ROOT/downloads" "$PROJECT_ROOT/optimizations" "$PROJECT_ROOT/data/backups"
@@ -99,13 +100,27 @@ smart_start() {
         tmux attach-session -t acc
     else
         cleanup_dash
-        # Start Gateway in background (serves UI and API)
-        bash "$PROJECT_ROOT/acc" gui &
+        # Start Gateway in background
+        bash "$PROJECT_ROOT/acc" gui > /dev/null 2>&1 &
 
-        # Setup TMUX for logs and background processes (hidden by default if user is in browser)
+        # Setup TMUX for logs
         tmux new-session -d -s acc -n "Gateway" "bash $PROJECT_ROOT/acc logs"
-        log "[SUCCESS] Acc Visual Dashboard is launching..."
-        log "Please check your browser at http://localhost:8333"
+
+        # Foreground wait for healthy gateway
+        log "Launching Visual Dashboard..."
+        log "Waiting for Gateway to initialize..."
+        timeout=60
+        while [ $timeout -gt 0 ]; do
+            if curl -s http://localhost:8333/health > /dev/null; then
+                log "[SUCCESS] Acc Visual Dashboard is live."
+                log "Opening: http://localhost:8333"
+                open_url "http://localhost:8333"
+                return
+            fi
+            sleep 2
+            ((timeout--))
+        done
+        log "\033[1;31mERROR\033[0m: Gateway timed out. Check logs/gateway.log"
     fi
 }
 
@@ -138,45 +153,22 @@ case "$1" in
         fi
         ;;
     gui)
-        log "Launching Visual Dashboard..."
         # Silence Node noise during build
         export NODE_OPTIONS="--no-deprecation"
 
         if [ ! -d "frontend/web/build/dist/wasmJs/productionExecutable" ]; then
-            log "Building frontend (one-time setup)..."
-            ./gradlew :frontend:web:wasmJsBrowserDistribution --quiet || { log "\033[1;31mERROR\033[0m: Frontend build failed."; exit 1; }
+            ./gradlew :frontend:web:wasmJsBrowserDistribution --quiet || exit 1
         fi
 
         # Check if port is already in use
         if command -v lsof &> /dev/null; then
             if lsof -Pi :8333 -sTCP:LISTEN -t >/dev/null ; then
-                log "[WARN] Port 8333 is already in use. Reusing existing instance."
-                open_url "http://localhost:8333"
                 exit 0
             fi
         fi
 
-        # 1. Start Gateway in background
-        nohup ./gradlew :gateway:run > "$PROJECT_ROOT/logs/gateway.log" 2>&1 &
-
-        # 2. Wait for it to be healthy
-        log "Waiting for Gateway to initialize..."
-        timeout=30
-        while [ $timeout -gt 0 ]; do
-            if curl -s http://localhost:8333/health > /dev/null; then
-                break
-            fi
-            sleep 1
-            ((timeout--))
-        done
-
-        if [ $timeout -eq 0 ]; then
-            log "\033[1;31mERROR\033[0m: Gateway failed to start. Check logs/gateway.log"
-            exit 1
-        fi
-
-        # 3. Open URL
-        open_url "http://localhost:8333"
+        # Start Gateway
+        ./gradlew :gateway:run --no-daemon > "$PROJECT_ROOT/logs/gateway.log" 2>&1
         ;;
     agent) python3 "$PROJECT_ROOT/brain/autonomous_architect.py" ;;
     chat) log "Opening Interactive Chat..."; ollama run "${2:-phi3}" ;;
