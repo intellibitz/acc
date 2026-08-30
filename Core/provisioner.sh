@@ -103,8 +103,11 @@ provision_model() {
         if ollama create "$target_name" -f "$model_opt_dir/Modelfile"; then
             log "[SUCCESS] $target_name active."; echo "$remote_sha" > "$local_sha_file"; rm -rf "$model_dl_dir"
         else log "[ERROR] Build failed."; return 1; fi
+    elif [[ "$provider" == "external" || "$provider" == "openai" ]]; then
+        log "[ATTACH] External model '$target_name' detected. Skipping provisioning."
+        echo "EXTERNAL" > "$local_sha_file"
     else
-        log "[SKIP] Engine '$provider' provisioning not yet implemented via shell. Please use Docker."
+        log "[SKIP] Engine '$provider' provisioning not yet implemented via shell. Please use Docker or Config/litellm_config.yaml."
         echo "$remote_sha" > "$local_sha_file"
     fi
 }

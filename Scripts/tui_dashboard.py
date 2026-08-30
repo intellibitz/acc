@@ -110,13 +110,22 @@ class OllamaDashboard:
             return True
         except: return False
 
+    def get_proxy_status(self):
+        try:
+            # LiteLLM proxy usually runs on port 4000
+            resp = requests.get("http://localhost:4000/health", timeout=1)
+            return {"online": True} if resp.status_code == 200 else {"online": False}
+        except: return {"online": False}
+
     def make_header(self) -> Panel:
         grid = Table.grid(expand=True)
         grid.add_column(justify="left", ratio=1); grid.add_column(justify="right", ratio=1)
         uptime_min = int((time.time() - self.start_time) // 60)
+        proxy = self.get_proxy_status()
+        proxy_str = "[green]PROXY ON[/]" if proxy["online"] else "[dim]PROXY OFF[/]"
         grid.add_row(
             Text("AI COMMAND CENTER [ACC]", style="bold magenta"),
-            Text("METHOD: {} | UP: {}m | {}".format(self.dl_method.upper(), uptime_min, self.status_msg), style="bold yellow")
+            Text(" {} | METHOD: {} | UP: {}m | {}".format(proxy_str, self.dl_method.upper(), uptime_min, self.status_msg), style="bold yellow")
         )
         return Panel(grid, style="white on blue")
 

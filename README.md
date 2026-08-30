@@ -15,6 +15,7 @@ ACC is designed for the developer who wants to *use* AI, not fight with dependen
 - **Master Orchestrator**: Just type `acc` to start.
 - **Visual Dashboard**: Real-time TUI tracking CPU, RAM, and NVIDIA GPU metrics (Temp/Power).
 - **Backend Agnostic**: Native support for **Ollama**, **LocalAI**, and **vLLM** via LiteLLM abstraction.
+- **Elite Integration**: Seamlessly connect your existing agents, external engines, and cloud APIs using the `Config/litellm_config.yaml`.
 - **Smart Provisioning**: Resilient multi-connection downloads (Aria2/HF-CLI) with automated reassembly.
 - **Elite Tuning**: Automated kernel and driver optimization for maximum tokens-per-second.
 - **Autonomous Intelligence**: Built-in "Architect" agents and interactive chat for instant reasoning.

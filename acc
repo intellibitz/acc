@@ -87,7 +87,15 @@ case "$1" in
     tune-model) $PROVISIONER tune-model "$2" "$3" ;;
     prune) $PROVISIONER prune ;;
     backup) $PROVISIONER backup ;;
-    proxy) log "Starting LiteLLM Proxy..."; litellm --model ollama/phi3 ;;
+    proxy)
+        log "Starting LiteLLM Proxy..."
+        if [ -f "$PROJECT_ROOT/Config/litellm_config.yaml" ]; then
+            litellm --config "$PROJECT_ROOT/Config/litellm_config.yaml"
+        else
+            log "[WARN] No litellm_config.yaml found. Using default Ollama bridge."
+            litellm --model ollama/phi3
+        fi
+        ;;
     agent) python3 "$PROJECT_ROOT/Agents/autonomous_architect.py" ;;
     chat) log "Opening Interactive Chat..."; ollama run "${2:-phi3}" ;;
     benchmark) python3 "$PROJECT_ROOT/Scripts/benchmark_ollama.py" ;;
