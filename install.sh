@@ -35,5 +35,5 @@ log "Installing Python dependencies..."
 pip3 install -r "$PROJECT_ROOT/requirements.txt" --quiet
 
 log "\n\033[1;36mSUCCESS!\033[0m"
-log "You can now launch the command center by simply typing: \033[1;37macc\033[0m"
-log "Try it now: \033[1;33macc dash\033[0m"
+log "Acc is now your elite AI workstation."
+log "Launch everything with a single command: \033[1;37macc\033[0m"

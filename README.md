@@ -42,15 +42,19 @@ acc is organized into a clean, professional architecture:
 git clone https://github.com/intellibitz/acc.git
 cd acc
 
-# 2. Install & Link
-./install.sh
-
-# 3. Launch the visual dashboard (TUI)
-acc dash
-
-# 4. Start the Agent Bridge
-acc agent
+# 2. Start the magic
+./acc
 ```
+
+---
+
+## 🏗️ The "Zero-Effort" Workflow
+When you run `acc` for the first time:
+1.  **Auto-Installation**: acc detects the new environment and runs a full dependency and health audit.
+2.  **Hardware Optimization**: It automatically tunes your Linux kernel and GPU for maximum AI performance.
+3.  **Model Provisioning**: It downloads and configures the latest fleet of high-performance models.
+4.  **Visual Dashboard**: It launches a Ktor Gateway and opens the high-performance **Visual Dashboard** in your browser automatically.
+5.  **Multi-Modal Station**: It sets up a `tmux` session with a real-time TUI dashboard and logs.
 
 ---
 

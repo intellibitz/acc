@@ -19,17 +19,22 @@ cleanup_dash() {
     pkill -f "tooling/tui_dashboard.py" 2>/dev/null
 }
 
+open_url() {
+    if command -v xdg-open &> /dev/null; then xdg-open "$1" &> /dev/null;
+    elif command -v open &> /dev/null; then open "$1" &> /dev/null;
+    else log "Please open: $1"; fi
+}
+
 setup_env() {
     log "Performing System Health Audit..."
     local missing=()
-    for cmd in tmux aria2c jq hf ollama docker; do
+    for cmd in tmux aria2c jq hf ollama docker java; do
         if ! command -v $cmd &> /dev/null; then missing+=("$cmd"); fi
     done
 
     if [ ${#missing[@]} -gt 0 ]; then
         log "\033[1;31mCRITICAL\033[0m: Missing required tools: [${missing[*]}]"
-        log "Please install them using your package manager (e.g., sudo apt install tmux aria2c jq)."
-        log "For hf-cli: pip install huggingface_hub"
+        log "Please install them using your package manager (e.g., sudo apt install tmux aria2c jq default-jdk)."
         exit 1
     fi
 
@@ -52,16 +57,33 @@ setup_env() {
 }
 
 smart_start() {
+    # 1. Zero-Effort Installation Check
     if [ ! -f "$INIT_SENTINEL" ]; then
-        log "\033[1;35mFIRST RUN\033[0m: Initializing Elite Workstation..."
+        log "\033[1;35mINITIALIZING ACC\033[0m: Setting up your workstation for the first time..."
+        # Run install.sh logic locally
+        chmod +x "$PROJECT_ROOT/acc" "$CORE_DIR/"*.sh
         setup_env; $PROVISIONER maintain
         touch "$INIT_SENTINEL"; log "[SUCCESS] Ready."
     fi
+
+    # 2. Start Infrastructure
     systemctl is-active --quiet ollama || { log "Starting Ollama..."; sudo systemctl start ollama; sleep 2; }
-    if [ -n "$TMUX" ]; then bash "$PROJECT_ROOT/acc" dash; return; fi
+
+    # 3. Launch Dashboard & Visual Interface
+    if [ -n "$TMUX" ]; then
+        bash "$PROJECT_ROOT/acc" dash
+        return
+    fi
+
     tmux has-session -t acc 2>/dev/null
-    if [ $? -eq 0 ]; then tmux attach-session -t acc; else
+    if [ $? -eq 0 ]; then
+        tmux attach-session -t acc
+    else
         cleanup_dash
+        # Open Visual Dashboard in Browser
+        bash "$PROJECT_ROOT/acc" gui &
+
+        # Setup TMUX with TUI and Logs
         tmux new-session -d -s acc -n "Dashboard" "bash $PROJECT_ROOT/acc dash"
         tmux split-window -v -p 25 -t acc:0 "bash $PROJECT_ROOT/acc logs"
         tmux select-pane -t 0; tmux attach-session -t acc
@@ -96,13 +118,32 @@ case "$1" in
             litellm --model ollama/phi3
         fi
         ;;
+    gui)
+        log "Launching Visual Dashboard..."
+        if [ ! -d "frontend/web/build/dist/wasmJs/productionExecutable" ]; then
+            log "Building frontend (one-time setup)..."
+            ./gradlew :frontend:web:wasmJsBrowserDistribution --quiet
+        fi
+        # 1. Start Gateway in background (using Gradle for now, but backgrounded)
+        nohup ./gradlew :gateway:run > "$PROJECT_ROOT/logs/gateway.log" 2>&1 &
+        # 2. Wait for it to start
+        sleep 5
+        # 3. Open URL
+        open_url "http://localhost:8080"
+        ;;
     agent) python3 "$PROJECT_ROOT/brain/autonomous_architect.py" ;;
     chat) log "Opening Interactive Chat..."; ollama run "${2:-phi3}" ;;
     benchmark) python3 "$PROJECT_ROOT/tooling/benchmark_ollama.py" ;;
     auto-scale) log "Auto-scaling fleet to hardware capabilities..."; $PROVISIONER auto-scale ;;
     brain) cat "$PROJECT_ROOT/brain.md" ;;
     logs) tail -f "$PROJECT_ROOT/logs/provisioner.log" ;;
-    stop) cleanup_dash; tmux kill-session -t acc 2>/dev/null; $OSM stop; log "Down." ;;
+    stop)
+        cleanup_dash
+        tmux kill-session -t acc 2>/dev/null
+        $OSM stop
+        pkill -f "gateway"
+        log "Down."
+        ;;
     ""|help) [[ -z "$1" ]] && smart_start || echo "Usage: ./acc [setup|up|dash|status|sync|tune-hw|update-ollama|rotate|fitness|search|add|remove|prune|backup|proxy|agent|chat|benchmark|auto-scale|stop]" ;;
     *) echo "Unknown: $1"; exit 1 ;;
 esac

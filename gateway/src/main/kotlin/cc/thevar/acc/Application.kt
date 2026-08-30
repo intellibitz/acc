@@ -7,11 +7,13 @@ import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.server.plugins.contentnegotiation.*
+import io.ktor.server.http.content.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import kotlinx.serialization.json.Json
+import java.io.File
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 
@@ -31,7 +33,12 @@ fun Application.module() {
     }
 
     routing {
-        get("/") {
+        // Serve the Visual Dashboard (Web Frontend)
+        staticFiles("/", File("frontend/web/build/dist/wasmJs/productionExecutable")) {
+            default("index.html")
+        }
+
+        get("/health") {
             call.respondText("Acc Gateway is Online.")
         }
 
