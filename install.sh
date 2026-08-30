@@ -18,9 +18,10 @@ for cmd in tmux curl jq pip3; do
     command -v $cmd >/dev/null 2>&1 || error "$cmd is not installed. Please install it first."
 done
 
-# 2. Make script executable
+# 2. Make scripts executable
 chmod +x "$PROJECT_ROOT/acc"
 chmod +x "$PROJECT_ROOT/common/"*.sh
+chmod +x "$PROJECT_ROOT/gradlew"
 
 # 3. Create symlink
 if [ -L "$BIN_TARGET" ]; then

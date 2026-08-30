@@ -28,13 +28,13 @@ open_url() {
 setup_env() {
     log "Performing System Health Audit..."
     local missing=()
-    for cmd in tmux aria2c jq hf ollama docker java; do
+    for cmd in tmux aria2c jq hf ollama docker java curl; do
         if ! command -v $cmd &> /dev/null; then missing+=("$cmd"); fi
     done
 
     if [ ${#missing[@]} -gt 0 ]; then
         log "\033[1;31mCRITICAL\033[0m: Missing required tools: [${missing[*]}]"
-        log "Please install them using your package manager (e.g., sudo apt install tmux aria2c jq default-jdk)."
+        log "Please install them using your package manager (e.g., sudo apt install tmux aria2c jq default-jdk curl)."
         exit 1
     fi
 
@@ -139,14 +139,42 @@ case "$1" in
         ;;
     gui)
         log "Launching Visual Dashboard..."
+        # Silence Node noise during build
+        export NODE_OPTIONS="--no-deprecation"
+
         if [ ! -d "frontend/web/build/dist/wasmJs/productionExecutable" ]; then
             log "Building frontend (one-time setup)..."
-            ./gradlew :frontend:web:wasmJsBrowserDistribution --quiet
+            ./gradlew :frontend:web:wasmJsBrowserDistribution --quiet || { log "\033[1;31mERROR\033[0m: Frontend build failed."; exit 1; }
         fi
-        # 1. Start Gateway in background (using Gradle for now, but backgrounded)
+
+        # Check if port is already in use
+        if command -v lsof &> /dev/null; then
+            if lsof -Pi :8333 -sTCP:LISTEN -t >/dev/null ; then
+                log "[WARN] Port 8333 is already in use. Reusing existing instance."
+                open_url "http://localhost:8333"
+                exit 0
+            fi
+        fi
+
+        # 1. Start Gateway in background
         nohup ./gradlew :gateway:run > "$PROJECT_ROOT/logs/gateway.log" 2>&1 &
-        # 2. Wait for it to start
-        sleep 5
+
+        # 2. Wait for it to be healthy
+        log "Waiting for Gateway to initialize..."
+        timeout=30
+        while [ $timeout -gt 0 ]; do
+            if curl -s http://localhost:8333/health > /dev/null; then
+                break
+            fi
+            sleep 1
+            ((timeout--))
+        done
+
+        if [ $timeout -eq 0 ]; then
+            log "\033[1;31mERROR\033[0m: Gateway failed to start. Check logs/gateway.log"
+            exit 1
+        fi
+
         # 3. Open URL
         open_url "http://localhost:8333"
         ;;
