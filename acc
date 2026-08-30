@@ -62,7 +62,7 @@ smart_start() {
         log "\033[1;35mINITIALIZING ACC\033[0m: Setting up your workstation for the first time..."
         # Run install.sh logic locally
         chmod +x "$PROJECT_ROOT/acc" "$CORE_DIR/"*.sh
-        setup_env; $PROVISIONER maintain
+        setup_env
         touch "$INIT_SENTINEL"; log "[SUCCESS] Ready."
     fi
 

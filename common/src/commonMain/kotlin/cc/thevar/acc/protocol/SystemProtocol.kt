@@ -33,6 +33,7 @@ data class ModelStatus(
 data class SystemState(
     val stats: SystemStats,
     val fleet: List<ModelStatus>,
+    val partialDownloads: List<String>,
     val proxyOnline: Boolean,
     val statusMsg: String
 )

@@ -64,7 +64,10 @@ fun App() {
         ) { padding ->
             Row(modifier = Modifier.padding(padding).fillMaxSize()) {
                 // Sidebar: Controls
-                Sidebar(onCommand = { consoleVm.runCommand(it) })
+                Sidebar(
+                    systemState = systemState,
+                    onCommand = { consoleVm.runCommand(it) }
+                )
                 
                 // Main Content: Split Middle and Right
                 Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
@@ -91,12 +94,35 @@ fun App() {
 }
 
 @Composable
-fun Sidebar(onCommand: (String) -> Unit) {
+fun Sidebar(systemState: SystemState?, onCommand: (String) -> Unit) {
     Column(
         modifier = Modifier.width(200.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surface).padding(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text("CONTROLS", style = MaterialTheme.typography.labelLarge, color = Color.Gray)
+        
+        systemState?.partialDownloads?.takeIf { it.isNotEmpty() }?.let { partials ->
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.Yellow.copy(alpha = 0.1f)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color.Yellow.copy(alpha = 0.5f))
+            ) {
+                Column(modifier = Modifier.padding(8.dp)) {
+                    Text("Partial Downloads:", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Yellow)
+                    partials.forEach { 
+                        Text("• $it", fontSize = 9.sp, color = Color.LightGray)
+                    }
+                    Button(
+                        onClick = { onCommand("up") },
+                        modifier = Modifier.fillMaxWidth().height(24.dp).padding(top = 4.dp),
+                        contentPadding = PaddingValues(0.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Yellow.copy(alpha = 0.2f), contentColor = Color.Yellow)
+                    ) {
+                        Text("Resume All", fontSize = 9.sp)
+                    }
+                }
+            }
+        }
+
         ControlButton("Provision (UP)", Icons.Default.CloudDownload, Color.Green) { onCommand("up") }
         ControlButton("Hardware Tune", Icons.Default.SettingsSuggest, Color(0xFFBB86FC)) { onCommand("tune-hw") }
         ControlButton("Sync Service", Icons.Default.Sync, Color.Cyan) { onCommand("sync") }
@@ -200,13 +226,39 @@ fun SystemPanel(state: SystemState?) {
         Spacer(modifier = Modifier.height(8.dp))
         Text("FLEET STATUS", style = MaterialTheme.typography.labelLarge, color = Color.Gray)
         
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(0.6f)) {
             state?.fleet?.let { fleet ->
                 items(fleet) { model ->
                     FleetItem(model)
                 }
             }
         }
+
+        state?.partialDownloads?.takeIf { it.isNotEmpty() }?.let { partials ->
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("PARTIAL DOWNLOADS", style = MaterialTheme.typography.labelLarge, color = Color.Yellow)
+                Spacer(modifier = Modifier.weight(1f))
+            }
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(0.4f)) {
+                items(partials) { name ->
+                    PartialDownloadItem(name)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PartialDownloadItem(name: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+    ) {
+        Icon(Icons.Default.Pending, null, tint = Color.Yellow, modifier = Modifier.size(14.dp))
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(name, fontSize = 11.sp, color = Color.White, modifier = Modifier.weight(1f))
+        Text("PARTIAL", fontSize = 9.sp, color = Color.Yellow)
     }
 }
 

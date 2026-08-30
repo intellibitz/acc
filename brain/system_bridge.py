@@ -56,6 +56,20 @@ def get_fleet_config():
     parse_conf(private_path, private)
     return managed, private
 
+def get_partial_downloads():
+    partials = []
+    dl_dir = os.path.join(PROJECT_ROOT, "downloads")
+    if os.path.exists(dl_dir):
+        for d in os.listdir(dl_dir):
+            path = os.path.join(dl_dir, d)
+            if os.path.isdir(path):
+                try:
+                    files = os.listdir(path)
+                    if any(f.endswith(".part") or ".part" in f for f in files):
+                        partials.append(d)
+                except: pass
+    return partials
+
 def get_system_state():
     cpu = psutil.cpu_percent()
     ram = psutil.virtual_memory()
@@ -64,6 +78,7 @@ def get_system_state():
     
     ollama = get_ollama_status()
     managed, private = get_fleet_config()
+    partials = get_partial_downloads()
     
     fleet = []
     if ollama.get("online"):
@@ -95,6 +110,7 @@ def get_system_state():
             "diskUsage": disk
         },
         "fleet": fleet,
+        "partialDownloads": partials,
         "proxyOnline": proxy_online,
         "statusMsg": "READY"
     }
