@@ -1,17 +1,17 @@
-# 🚀 AI Command Center (ACC)
+# 🚀 AI Command Center (acc)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform: Linux](https://img.shields.io/badge/Platform-Linux%20%2F%20WSL2-blue.svg)](https://ubuntu.com/)
 [![Engine: Backend-Agnostic](https://img.shields.io/badge/Engine-Ollama%20%7C%20LocalAI%20%7C%20vLLM-blueviolet.svg)](https://litellm.ai/)
 
-**AI Command Center (ACC)** is the elite orchestration environment for AI Agents and LLMs. It transforms your workstation into a professional-grade AI cockpit with **zero-effort** provisioning, real-time visual monitoring, and multi-tier hardware tuning.
+**AI Command Center (acc)** is the elite orchestration environment for AI Agents and LLMs. It transforms your workstation into a professional-grade AI cockpit with **zero-effort** provisioning, real-time visual monitoring, and multi-tier hardware tuning.
 
 Run any open-source model—from Phi-3 to Llama 3.1 70B—with a single command.
 
 ---
 
 ## 🌟 Vision: Zero Effort, Infinite Intelligence
-ACC is designed for the developer who wants to *use* AI, not fight with dependencies.
+acc is designed for the developer who wants to *use* AI, not fight with dependencies.
 - **Master Orchestrator**: Just type `acc` to start.
 - **Visual Dashboard**: Real-time TUI tracking CPU, RAM, and NVIDIA GPU metrics (Temp/Power).
 - **Backend Agnostic**: Native support for **Ollama**, **LocalAI**, and **vLLM** via LiteLLM abstraction.
@@ -65,7 +65,7 @@ The visual dashboard provides a centralized hub for your entire fleet:
 ---
 
 ## 🤝 Contributing
-ACC is built for the community. If you have ideas for better orchestration or new model superpowers, check out our [CONTRIBUTING.md](CONTRIBUTING.md).
+acc is built for the community. If you have ideas for better orchestration or new model superpowers, check out our [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## 🛡️ License
 Distributed under the MIT License. See `LICENSE` for more information.

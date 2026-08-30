@@ -1,10 +1,10 @@
 #!/bin/bash
 # ==============================================================================
-# AI COMMAND CENTER (ACC) - ULTIMATE SMART ORCHESTRATOR
+# AI COMMAND CENTER (acc) - ULTIMATE SMART ORCHESTRATOR
 # ==============================================================================
 
 PROJECT_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-CORE_DIR="$PROJECT_ROOT/Core"
+CORE_DIR="$PROJECT_ROOT/core"
 RUN_DIR="$PROJECT_ROOT/Data/run"; mkdir -p "$RUN_DIR"
 INIT_SENTINEL="$PROJECT_ROOT/Data/.initialized"
 
@@ -12,7 +12,7 @@ PROVISIONER="bash $CORE_DIR/provisioner.sh"
 OSM="bash $CORE_DIR/osm.sh"
 DASH_PID_FILE="$RUN_DIR/dash.pid"; LOCK_FILE="$RUN_DIR/acc.lock"
 
-log() { echo -e "[\033[1;34mACC\033[0m] $1"; }
+log() { echo -e "[\033[1;34macc\033[0m] $1"; }
 
 cleanup_dash() {
     [ -f "$DASH_PID_FILE" ] && { pid=$(cat "$DASH_PID_FILE"); kill "$pid" 2>/dev/null; sleep 1; rm "$DASH_PID_FILE"; }
@@ -59,12 +59,12 @@ smart_start() {
     fi
     systemctl is-active --quiet ollama || { log "Starting Ollama..."; sudo systemctl start ollama; sleep 2; }
     if [ -n "$TMUX" ]; then bash "$PROJECT_ROOT/acc" dash; return; fi
-    tmux has-session -t ACC 2>/dev/null
-    if [ $? -eq 0 ]; then tmux attach-session -t ACC; else
+    tmux has-session -t acc 2>/dev/null
+    if [ $? -eq 0 ]; then tmux attach-session -t acc; else
         cleanup_dash
-        tmux new-session -d -s ACC -n "Dashboard" "bash $PROJECT_ROOT/acc dash"
-        tmux split-window -v -p 25 -t ACC:0 "bash $PROJECT_ROOT/acc logs"
-        tmux select-pane -t 0; tmux attach-session -t ACC
+        tmux new-session -d -s acc -n "Dashboard" "bash $PROJECT_ROOT/acc dash"
+        tmux split-window -v -p 25 -t acc:0 "bash $PROJECT_ROOT/acc logs"
+        tmux select-pane -t 0; tmux attach-session -t acc
     fi
 }
 
@@ -102,7 +102,7 @@ case "$1" in
     auto-scale) log "Auto-scaling fleet to hardware capabilities..."; $PROVISIONER auto-scale ;;
     brain) cat "$PROJECT_ROOT/brain.md" ;;
     logs) tail -f "$PROJECT_ROOT/Logs/provisioner.log" ;;
-    stop) cleanup_dash; tmux kill-session -t ACC 2>/dev/null; $OSM stop; log "Down." ;;
+    stop) cleanup_dash; tmux kill-session -t acc 2>/dev/null; $OSM stop; log "Down." ;;
     ""|help) [[ -z "$1" ]] && smart_start || echo "Usage: ./acc [setup|up|dash|status|sync|tune-hw|update-ollama|rotate|fitness|search|add|remove|prune|backup|proxy|agent|chat|benchmark|auto-scale|stop]" ;;
     *) echo "Unknown: $1"; exit 1 ;;
 esac

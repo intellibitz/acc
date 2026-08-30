@@ -18,7 +18,7 @@ from rich import box
 from rich.progress import Progress, BarColumn, TextColumn, TimeRemainingColumn
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-ACC_PATH = os.path.join(PROJECT_ROOT, "acc")
+acc_path = os.path.join(PROJECT_ROOT, "acc")
 console = Console()
 
 class OllamaDashboard:
@@ -132,7 +132,7 @@ class OllamaDashboard:
         proxy = self.get_proxy_status()
         proxy_str = "[green]PROXY ON[/]" if proxy["online"] else "[dim]PROXY OFF[/]"
         grid.add_row(
-            Text("AI COMMAND CENTER [ACC]", style="bold magenta"),
+            Text("AI COMMAND CENTER [acc]", style="bold magenta"),
             Text(" {} | METHOD: {} | UP: {}m | {}".format(proxy_str, self.dl_method.upper(), uptime_min, self.status_msg), style="bold yellow")
         )
         return Panel(grid, style="white on blue")
@@ -229,7 +229,7 @@ class OllamaDashboard:
     def run_task(self, target, query=None, extra=None):
         self.is_running = True; self.status_msg = "RUNNING " + target.upper()
         try:
-            cmd = [ACC_PATH, target]
+            cmd = [acc_path, target]
             if target == "up": cmd.append("--method=" + self.dl_method)
             if target in ["search", "add", "remove", "status", "brain"] and query: cmd.append(query)
             if target == "tune-model" and query and extra: cmd.append(query); cmd.append(extra)
@@ -328,13 +328,13 @@ class OllamaDashboard:
             if n: threading.Thread(target=self.run_task, args=("remove", n), daemon=True).start()
         elif target == "chat":
             n = console.input("[bold blue]Model to Chat (default phi3): [/]")
-            if os.getenv("TMUX"): subprocess.run(["tmux", "split-window", "-h", "bash " + ACC_PATH + " chat " + (n if n else "phi3")])
+            if os.getenv("TMUX"): subprocess.run(["tmux", "split-window", "-h", "bash " + acc_path + " chat " + (n if n else "phi3")])
             else: self.log_activity("Error: Run in TMUX first.")
         elif target == "tune-hw": self.tune_hw_menu()
         elif target == "tune-svc": self.tune_svc_menu()
         elif target == "tune-model": self.tune_model_menu()
         elif target in ["agent", "proxy", "logs"]:
-            if os.getenv("TMUX"): subprocess.run(["tmux", "split-window", "-h", "bash " + ACC_PATH + " " + target])
+            if os.getenv("TMUX"): subprocess.run(["tmux", "split-window", "-h", "bash " + acc_path + " " + target])
             else: self.log_activity("Error: Run in TMUX first.")
         elif target == 'm':
             self.log_activity("Pick: (1) HF  (2) PULL  (3) ARIA")
@@ -344,16 +344,16 @@ class OllamaDashboard:
             elif c == "3": self.dl_method = "aria"
             self.log_activity("Method: " + self.dl_method.upper())
         elif target == '!':
-            self.log_activity("Shutting down..."); subprocess.run([ACC_PATH, "stop"]); sys.exit(0)
+            self.log_activity("Shutting down..."); subprocess.run([acc_path, "stop"]); sys.exit(0)
         elif target == 'q': sys.exit(0)
         else: self.log_activity("Cmd: " + action)
 
 def run_dashboard():
-    dash = OllamaDashboard(); dash.log_activity("ACC Orchestrator Online")
+    dash = OllamaDashboard(); dash.log_activity("acc Orchestrator Online")
     while True:
         os.system('clear'); console.print(dash.generate_layout())
         try:
-            cmd = console.input("[bold yellow]ACC > [/]")
+            cmd = console.input("[bold yellow]acc > [/]")
             if cmd: dash.execute_action(cmd)
         except: break
 

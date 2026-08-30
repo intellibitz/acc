@@ -1,6 +1,6 @@
-# Contributing to AI Command Center (ACC)
+# Contributing to AI Command Center (acc)
 
-We love your input! We want to make ACC the best zero-effort AI orchestration tool for everyone.
+We love your input! We want to make acc the best zero-effort AI orchestration tool for everyone.
 
 ## How Can I Contribute?
 

@@ -51,7 +51,7 @@ class AutonomousArchitect:
                 break
 
 if __name__ == "__main__":
-    # In a real ACC environment, we would detect if the proxy is running
+    # In a real acc environment, we would detect if the proxy is running
     # For now, we default to the env vars or internal defaults
     model_name = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_MODEL
     api_base = sys.argv[2] if len(sys.argv) > 2 else API_BASE
