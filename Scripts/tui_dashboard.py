@@ -40,11 +40,23 @@ class OllamaDashboard:
 
     def get_gpu_stats(self):
         try:
-            cmd = "nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total --format=csv,noheader,nounits"
+            cmd = "nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw --format=csv,noheader,nounits"
             output = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode().strip()
             parts = output.split(", ")
-            return {"util": float(parts[0]), "mem_used": float(parts[1]), "mem_total": float(parts[2]), "active": True}
+            return {
+                "util": float(parts[0]), "mem_used": float(parts[1]), "mem_total": float(parts[2]),
+                "temp": float(parts[3]), "power": float(parts[4]), "active": True
+            }
         except: return {"active": False}
+
+    def get_fleet_disk_usage(self):
+        try:
+            # This is a simplification; actual Ollama model storage varies by OS
+            ollama_dir = os.path.expanduser("~/.ollama/models")
+            if not os.path.exists(ollama_dir): return "N/A"
+            cmd = "du -sh {} | awk '{{print $1}}'".format(ollama_dir)
+            return subprocess.check_output(cmd, shell=True).decode().strip()
+        except: return "ERR"
 
     def get_ollama_status(self):
         try:
@@ -110,11 +122,16 @@ class OllamaDashboard:
 
     def make_system_stats(self) -> Panel:
         cpu = psutil.cpu_percent(); ram = psutil.virtual_memory(); gpu = self.get_gpu_stats()
+        disk = self.get_fleet_disk_usage()
         t = Table.grid(padding=(0, 1))
         t.add_column(style="bold cyan", width=12); t.add_column(width=20)
         t.add_row("CPU", "{}%".format(cpu)); t.add_row("RAM", "{:.1f}/{:.0f}G".format(ram.used/(1024**3), ram.total/(1024**3)))
         if gpu["active"]:
-            t.add_row("GPU UTIL", "{}%".format(gpu['util'])); t.add_row("GPU VRAM", "{:.1f}/{:.1f}G".format(gpu['mem_used']/1024, gpu['mem_total']/1024))
+            t.add_row("GPU UTIL", "{}%".format(gpu['util']))
+            t.add_row("GPU VRAM", "{:.1f}/{:.1f}G".format(gpu['mem_used']/1024, gpu['mem_total']/1024))
+            t.add_row("GPU TEMP", "{}°C".format(gpu['temp']))
+            t.add_row("GPU PWR", "{}W".format(gpu['power']))
+        t.add_row("FLEET DISK", disk)
         return Panel(t, title="[bold white]HARDWARE[/]", border_style="cyan")
 
     def make_fleet_status(self) -> Panel:
@@ -150,8 +167,8 @@ class OllamaDashboard:
             controls = Table.grid(expand=True); controls.add_column(justify="center")
             controls.add_row(Text.assemble(
                 (" [1] UP ", "bold green"), " ", (" [2] FIT ", "bold magenta"), " ",
-                (" [A] ADD ", "bold blue"), " ", (" [R] RMV ", "bold red"), " ",
-                (" [S] SRCH ", "bold cyan"), " ", (" [M] METH ", "bold yellow"), " ",
+                (" [V] SYNC ", "bold cyan"), " ", (" [A] ADD ", "bold blue"), " ",
+                (" [R] RMV ", "bold red"), " ", (" [S] SRCH ", "bold yellow"), " ",
                 (" [Y] PRXY ", "bold white on magenta")
             ))
             controls.add_row(Text.assemble(
@@ -161,9 +178,10 @@ class OllamaDashboard:
                 (" [O] ROT ", "bold white on blue"), " ", (" [E] SETP ", "bold dim white")
             ))
             controls.add_row(Text.assemble(
-                (" [G] AGNT ", "bold white on magenta"), " ", (" [L] LOGS ", "bold white on cyan"), " ",
-                (" [I] STAT ", "bold white on green"), " ", (" [?] BRN ", "bold white on green"), " ",
-                (" [!] OFF ", "bold red")
+                (" [G] AGNT ", "bold white on magenta"), " ", (" [W] CHAT ", "bold white on blue"), " ",
+                (" [J] BNCH ", "bold white on yellow"), " ", (" [Z] AUTO ", "bold white on green"), " ",
+                (" [L] LOGS ", "bold white on cyan"), " ", (" [I] STAT ", "bold white on green"), " ",
+                (" [?] BRN ", "bold white on green"), " ", (" [!] OFF ", "bold red")
             ))
         return Panel(controls, title="[bold white]CONTROLS[/]", border_style="white")
 
@@ -255,13 +273,14 @@ class OllamaDashboard:
             elif action == 'q': sys.exit(0)
             return
         cmd_map = {
-            "1": "up", "2": "fitness", "s": "search", "a": "add", "r": "remove",
+            "1": "up", "2": "fitness", "v": "sync", "s": "search", "a": "add", "r": "remove",
             "t": "tune-hw", "c": "tune-svc", "p": "tune-model", "u": "update-ollama",
             "k": "prune", "b": "backup", "g": "agent", "?": "brain",
-            "y": "proxy", "o": "rotate", "e": "setup", "i": "status", "l": "logs"
+            "y": "proxy", "o": "rotate", "e": "setup", "i": "status", "l": "logs",
+            "j": "benchmark", "z": "auto-scale", "w": "chat"
         }
         target = cmd_map.get(action, action)
-        if target in ["up", "fitness", "status", "setup", "sync", "update-ollama", "prune", "backup", "brain", "rotate"]:
+        if target in ["up", "fitness", "status", "setup", "sync", "update-ollama", "prune", "backup", "brain", "rotate", "benchmark", "auto-scale"]:
             threading.Thread(target=self.run_task, args=(target,), daemon=True).start()
         elif target == "search":
             q = console.input("[bold yellow]Search: [/]")
@@ -272,6 +291,10 @@ class OllamaDashboard:
         elif target == "remove":
             n = console.input("[bold red]Name: [/]")
             if n: threading.Thread(target=self.run_task, args=("remove", n), daemon=True).start()
+        elif target == "chat":
+            n = console.input("[bold blue]Model to Chat (default phi3): [/]")
+            if os.getenv("TMUX"): subprocess.run(["tmux", "split-window", "-h", "bash " + ACC_PATH + " chat " + (n if n else "phi3")])
+            else: self.log_activity("Error: Run in TMUX first.")
         elif target == "tune-hw": self.tune_hw_menu()
         elif target == "tune-svc": self.tune_svc_menu()
         elif target == "tune-model": self.tune_model_menu()

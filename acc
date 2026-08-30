@@ -89,9 +89,12 @@ case "$1" in
     backup) $PROVISIONER backup ;;
     proxy) log "Starting LiteLLM Proxy..."; litellm --model ollama/phi3 ;;
     agent) python3 "$PROJECT_ROOT/Agents/autonomous_architect.py" ;;
+    chat) log "Opening Interactive Chat..."; ollama run "${2:-phi3}" ;;
+    benchmark) python3 "$PROJECT_ROOT/Scripts/benchmark_ollama.py" ;;
+    auto-scale) log "Auto-scaling fleet to hardware capabilities..."; $PROVISIONER auto-scale ;;
     brain) cat "$PROJECT_ROOT/brain.md" ;;
     logs) tail -f "$PROJECT_ROOT/Logs/provisioner.log" ;;
     stop) cleanup_dash; tmux kill-session -t ACC 2>/dev/null; $OSM stop; log "Down." ;;
-    ""|help) [[ -z "$1" ]] && smart_start || echo "Usage: ./acc [setup|up|dash|status|sync|tune-hw|update-ollama|rotate|fitness|search|add|remove|prune|backup|proxy|stop]" ;;
+    ""|help) [[ -z "$1" ]] && smart_start || echo "Usage: ./acc [setup|up|dash|status|sync|tune-hw|update-ollama|rotate|fitness|search|add|remove|prune|backup|proxy|agent|chat|benchmark|auto-scale|stop]" ;;
     *) echo "Unknown: $1"; exit 1 ;;
 esac

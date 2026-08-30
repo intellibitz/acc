@@ -139,11 +139,31 @@ backup_config() {
     log "[SUCCESS] Configuration backed up to $b_dir"
 }
 
+auto_scale() {
+    log ">>> RUNNING HARDWARE-AWARE AUTO-SCALING..."
+    if command -v nvidia-smi &> /dev/null; then
+        VRAM=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -n 1)
+    else
+        VRAM=0
+    fi
+    RAM=$(free -g | awk '/^Mem:/{print $2}')
+    log "[DETECT] VRAM: ${VRAM}MB | RAM: ${RAM}GB"
+
+    if [ "$VRAM" -ge 40000 ]; then
+        log "[TARGET] Tier: ELITE (Ready for 70B+)"
+    elif [ "$VRAM" -ge 16000 ]; then
+        log "[TARGET] Tier: STRONG (Ready for 30B-70B)"
+    else
+        log "[TARGET] Tier: FAST (Ready for <14B)"
+    fi
+    log "[INFO] Use 'acc add' to customize your fleet further."
+}
+
 # Parse args
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         --method) DL_METHOD="$2"; shift ;;
-        maintain|provision|fitness|prune|backup) CMD="$1" ;;
+        maintain|provision|fitness|prune|backup|auto-scale) CMD="$1" ;;
         search) CMD="search"; QUERY="$2"; shift ;;
         add) CMD="add"; ENTRY="$2"; shift ;;
         remove) CMD="remove"; NAME="$2"; shift ;;
@@ -160,5 +180,6 @@ case "$CMD" in
     tune-model) tune_model "$T_NAME" "$T_PARAMS" ;;
     prune) prune_fleet ;;
     backup) backup_config ;;
-    *) echo "Usage: provisioner {maintain|search|add|remove|tune-model|prune|backup}"; exit 1 ;;
+    auto-scale) auto_scale ;;
+    *) echo "Usage: provisioner {maintain|search|add|remove|tune-model|prune|backup|auto-scale}"; exit 1 ;;
 esac
