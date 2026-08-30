@@ -21,16 +21,27 @@ class SystemViewModel : ViewModel() {
     fun connect(host: String = "localhost", port: Int = 8333) {
         viewModelScope.launch {
             try {
-                client.webSocket(host = host, port = port, path = "/ws/system") {
-                    for (frame in incoming) {
-                        if (frame is Frame.Text) {
-                            val text = frame.readText()
-                            _state.value = Json.decodeFromString<SystemState>(text)
-                        }
+                // Try secure first
+                try {
+                    client.webSocket(host = host, port = port, path = "/ws/system", request = { url.protocol = io.ktor.http.URLProtocol.WSS }) {
+                        processSession(this)
+                    }
+                } catch (e: Exception) {
+                    client.webSocket(host = host, port = port, path = "/ws/system") {
+                        processSession(this)
                     }
                 }
             } catch (e: Exception) {
                 println("System WebSocket failed: ${e.message}")
+            }
+        }
+    }
+
+    private suspend fun processSession(session: DefaultClientWebSocketSession) {
+        for (frame in session.incoming) {
+            if (frame is Frame.Text) {
+                val text = frame.readText()
+                _state.value = Json.decodeFromString<SystemState>(text)
             }
         }
     }

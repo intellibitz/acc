@@ -2,29 +2,25 @@ rootProject.name = "acc"
 
 pluginManagement {
     repositories {
-        google {
-            content {
-                includeGroupAndSubgroups("com.android")
-                includeGroupAndSubgroups("com.google")
-                includeGroupAndSubgroups("androidx")
-            }
-        }
         mavenCentral()
+        google()
         gradlePluginPortal()
     }
 }
 
 dependencyResolutionManagement {
-    repositoriesMode.set(RepositoriesMode.PREFER_PROJECT)
+    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
     repositories {
-        google {
-            content {
-                includeGroupAndSubgroups("com.android")
-                includeGroupAndSubgroups("com.google")
-                includeGroupAndSubgroups("androidx")
-            }
-        }
         mavenCentral()
+        google()
+        ivy {
+            url = uri("https://nodejs.org/dist")
+            patternLayout {
+                artifact("v[revision]/[artifact]-v[revision]-[classifier].[ext]")
+            }
+            metadataSources { artifact() }
+            content { includeGroup("org.nodejs") }
+        }
     }
 }
 

@@ -28,7 +28,7 @@ open_url() {
 setup_env() {
     log "Performing System Health Audit..."
     local missing=()
-    for cmd in tmux aria2c jq hf ollama docker java curl; do
+    for cmd in tmux aria2c jq hf ollama docker java curl keytool; do
         if ! command -v $cmd &> /dev/null; then missing+=("$cmd"); fi
     done
 
@@ -42,7 +42,16 @@ setup_env() {
     pip install -r "$PROJECT_ROOT/requirements.txt" --quiet --break-system-packages 2>/dev/null || \
     pip install -r "$PROJECT_ROOT/requirements.txt" --quiet
 
-    mkdir -p "$PROJECT_ROOT/logs" "$PROJECT_ROOT/downloads" "$PROJECT_ROOT/optimizations" "$PROJECT_ROOT/data/backups"
+    mkdir -p "$PROJECT_ROOT/logs" "$PROJECT_ROOT/downloads" "$PROJECT_ROOT/optimizations" "$PROJECT_ROOT/data/backups" "$PROJECT_ROOT/config"
+
+    # Generate Self-Signed Certificate for HTTPS
+    if [ ! -f "$PROJECT_ROOT/config/keystore.p12" ]; then
+        log "Generating secure local identity..."
+        keytool -genkeypair -alias acc -keyalg RSA -keysize 2048 -storetype PKCS12 \
+            -keystore "$PROJECT_ROOT/config/keystore.p12" -validity 365 \
+            -storepass password -keypass password \
+            -dname "CN=localhost, OU=acc, O=intellibitz, L=Unknown, ST=Unknown, C=Unknown" > /dev/null 2>&1
+    fi
 
     # Load HF Token if exists (safely)
     if [ -z "$HF_TOKEN" ] && [ -f "$PROJECT_ROOT/.env" ]; then
@@ -111,10 +120,10 @@ smart_start() {
         log "Waiting for Gateway to initialize..."
         timeout=60
         while [ $timeout -gt 0 ]; do
-            if curl -s http://localhost:8333/health > /dev/null; then
+            if curl -sk https://localhost:8333/health > /dev/null; then
                 log "[SUCCESS] Acc Visual Dashboard is live."
-                log "Opening: http://localhost:8333"
-                open_url "http://localhost:8333"
+                log "Opening: https://localhost:8333"
+                open_url "https://localhost:8333"
                 return
             fi
             sleep 2

@@ -1,12 +1,13 @@
 plugins {
     alias(libs.plugins.kotlinJvm)
-    alias(libs.plugins.ktor)
+    application
 }
 
 group = "cc.thevar.acc"
 version = "1.0.0"
+
 application {
-    mainClass = "cc.thevar.acc.ApplicationKt"
+    mainClass.set("cc.thevar.acc.ApplicationKt")
 }
 
 dependencies {

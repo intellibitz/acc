@@ -22,19 +22,31 @@ class ConsoleViewModel : ViewModel() {
     fun connect(host: String = "localhost", port: Int = 8333) {
         viewModelScope.launch {
             try {
-                client.webSocket(host = host, port = port, path = "/ws/console") {
-                    session = this
-                    for (frame in incoming) {
-                        if (frame is Frame.Text) {
-                            val line = Json.decodeFromString<ConsoleLine>(frame.readText())
-                            _lines.update { it + line }
-                        }
+                // Try secure first
+                try {
+                    client.webSocket(host = host, port = port, path = "/ws/console", request = { url.protocol = io.ktor.http.URLProtocol.WSS }) {
+                        this@ConsoleViewModel.session = this
+                        processSession(this)
+                    }
+                } catch (e: Exception) {
+                    client.webSocket(host = host, port = port, path = "/ws/console") {
+                        this@ConsoleViewModel.session = this
+                        processSession(this)
                     }
                 }
             } catch (e: Exception) {
                 println("Console WebSocket failed: ${e.message}")
             } finally {
                 session = null
+            }
+        }
+    }
+
+    private suspend fun processSession(session: DefaultClientWebSocketSession) {
+        for (frame in session.incoming) {
+            if (frame is Frame.Text) {
+                val line = Json.decodeFromString<ConsoleLine>(frame.readText())
+                _lines.update { it + line }
             }
         }
     }

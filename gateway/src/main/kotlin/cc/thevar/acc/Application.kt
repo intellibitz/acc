@@ -13,16 +13,41 @@ import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.*
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.security.KeyStore
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration.Companion.seconds
 
 fun main() {
-    embeddedServer(Netty, port = 8333, host = "0.0.0.0", module = Application::module)
-        .start(wait = true)
+    val keyStoreFile = File("config/keystore.p12")
+    val serverPort = 8333
+    
+    if (keyStoreFile.exists()) {
+        val keyStorePassword = "password".toCharArray()
+        val keyStore = KeyStore.getInstance("PKCS12")
+        keyStoreFile.inputStream().use { 
+            keyStore.load(it, keyStorePassword) 
+        }
+
+        embeddedServer(Netty, configure = {
+            sslConnector(
+                keyStore = keyStore,
+                keyAlias = "acc",
+                keyStorePassword = { keyStorePassword },
+                privateKeyPassword = { keyStorePassword }
+            ) {
+                port = serverPort
+                keyStorePath = keyStoreFile
+            }
+        }) {
+            module()
+        }.start(wait = true)
+    } else {
+        embeddedServer(Netty, port = serverPort, host = "0.0.0.0", module = Application::module)
+            .start(wait = true)
+    }
 }
 
 val uiSessions = Collections.newSetFromMap(ConcurrentHashMap<DefaultWebSocketServerSession, Boolean>())
@@ -65,9 +90,8 @@ fun Application.module() {
     }
 
     routing {
-        // Serve the Visual Dashboard (Web Frontend)
-        staticFiles("/", File("frontend/web/build/dist/wasmJs/productionExecutable")) {
-            default("index.html")
+        get("/") {
+            call.respondFile(File("frontend/web/build/dist/wasmJs/productionExecutable/index.html"))
         }
 
         get("/health") {
@@ -137,6 +161,11 @@ fun Application.module() {
                     }
                 }
             } finally { }
+        }
+
+        // Serve the Visual Dashboard (Web Frontend)
+        staticFiles("/", File("frontend/web/build/dist/wasmJs/productionExecutable")) {
+            default("index.html")
         }
     }
 }

@@ -30,20 +30,32 @@ class AgentViewModel : ViewModel() {
     fun connect(host: String = "localhost", port: Int = 8333) {
         viewModelScope.launch {
             try {
-                client.webSocket(host = host, port = port, path = "/ws/ui") {
-                    println("Connected to Gateway WebSocket")
-                    while (true) {
-                        try {
-                            val message = receiveDeserialized<AgentMessage>()
-                            _messages.update { it + message }
-                        } catch (e: Exception) {
-                            println("Error receiving message: ${e.message}")
-                            break
-                        }
+                // Try secure first
+                try {
+                    client.webSocket(host = host, port = port, path = "/ws/ui", request = { url.protocol = io.ktor.http.URLProtocol.WSS }) {
+                        println("Connected to Secure Gateway WebSocket")
+                        processSession(this)
+                    }
+                } catch (e: Exception) {
+                    client.webSocket(host = host, port = port, path = "/ws/ui") {
+                        println("Connected to Gateway WebSocket")
+                        processSession(this)
                     }
                 }
             } catch (e: Exception) {
                 println("WebSocket connection failed: ${e.message}")
+            }
+        }
+    }
+
+    private suspend fun processSession(session: DefaultClientWebSocketSession) {
+        while (true) {
+            try {
+                val message = session.receiveDeserialized<AgentMessage>()
+                _messages.update { it + message }
+            } catch (e: Exception) {
+                println("Error receiving message: ${e.message}")
+                break
             }
         }
     }
