@@ -53,8 +53,8 @@ When you run `acc` for the first time:
 1.  **Auto-Installation**: acc detects the new environment and runs a full dependency and health audit.
 2.  **Hardware Optimization**: It automatically tunes your Linux kernel and GPU for maximum AI performance.
 3.  **Model Provisioning**: It downloads and configures the latest fleet of high-performance models.
-4.  **Visual Dashboard**: It launches a Ktor Gateway and opens the high-performance **Visual Dashboard** in your browser automatically.
-5.  **Multi-Modal Station**: It sets up a `tmux` session with a real-time TUI dashboard and logs.
+4.  **Integrated Visual Dashboard**: It launches a Ktor Gateway and opens the high-performance **Visual Dashboard** in your browser.
+5.  **Unified Control**: Control everything from the browser—provision models, tune hardware, and watch agent thought streams in one place.
 
 ---
 
