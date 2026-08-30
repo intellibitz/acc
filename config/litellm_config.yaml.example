@@ -14,7 +14,7 @@ model_list:
   # - model_name: localai/gpt4
   #   litellm_params:
   #     model: openai/gpt-4
-  #     api_base: http://localhost:8080/v1
+  #     api_base: http://localhost:8333/v1
 
 litellm_settings:
   drop_params: True

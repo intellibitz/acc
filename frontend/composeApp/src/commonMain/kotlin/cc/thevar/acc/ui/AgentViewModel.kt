@@ -27,7 +27,7 @@ class AgentViewModel : ViewModel() {
         }
     }
 
-    fun connect(host: String = "localhost", port: Int = 8080) {
+    fun connect(host: String = "localhost", port: Int = 8333) {
         viewModelScope.launch {
             try {
                 client.webSocket(host = host, port = port, path = "/ws/ui") {

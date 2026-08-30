@@ -129,7 +129,7 @@ case "$1" in
         # 2. Wait for it to start
         sleep 5
         # 3. Open URL
-        open_url "http://localhost:8080"
+        open_url "http://localhost:8333"
         ;;
     agent) python3 "$PROJECT_ROOT/brain/autonomous_architect.py" ;;
     chat) log "Opening Interactive Chat..."; ollama run "${2:-phi3}" ;;

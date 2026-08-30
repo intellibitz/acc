@@ -5,12 +5,12 @@ services:
     image: localai/localai:latest-gpu-nvidia # Or latest for CPU
     container_name: local-ai
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/readyz"]
+      test: ["CMD", "curl", "-f", "http://localhost:8333/readyz"]
       interval: 1m
       timeout: 10s
       retries: 3
     ports:
-      - "8080:8080"
+      - "8333:8333"
     environment:
       - MODELS_PATH=/models
       - DEBUG=true

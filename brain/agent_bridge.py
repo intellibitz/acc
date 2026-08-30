@@ -7,7 +7,7 @@ from autonomous_architect import AutonomousArchitect
 
 # --- Configuration ---
 AGENT_NAME = "Architect-Alpha"
-GATEWAY_URL = "ws://localhost:8080/ws/agent"
+GATEWAY_URL = "ws://localhost:8333/ws/agent"
 MODEL = os.getenv("ACC_MODEL", "ollama/phi3")
 API_BASE = os.getenv("ACC_API_BASE", "http://localhost:11434")
 
