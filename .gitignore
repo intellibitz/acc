@@ -1,0 +1,53 @@
+# AI Command Center (ACC) - Global Git Ignore
+
+# System & OS
+.DS_Store
+Thumbs.db
+*.log
+*.pid
+*.lock
+.initialized
+
+# Data & Blobs (Large files stored locally)
+Downloads/
+Optimizations/
+Archives/
+Data/run/
+Data/Backups/
+Data/.initialized
+Data/LocalAI/models/
+
+# Android Specific
+.gradle/
+build/
+local.properties
+Captures/
+*.apk
+*.aar
+.idea/caches/
+.idea/workspace.xml
+.idea/libraries/
+.idea/modules.xml
+.idea/deploymentTargetDropDown.xml
+*.iml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+.env
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Models & Manifests
+*.gguf
+*.part*
+Modelfile
+last_sync_sha
+user_params
+fleet.conf.local
+
+# Docker
+.docker/

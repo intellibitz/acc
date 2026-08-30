@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  local-ai:
+    image: localai/localai:latest-gpu-nvidia # Or latest for CPU
+    container_name: local-ai
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/readyz"]
+      interval: 1m
+      timeout: 10s
+      retries: 3
+    ports:
+      - "8080:8080"
+    environment:
+      - MODELS_PATH=/models
+      - DEBUG=true
+    volumes:
+      - ./Data/LocalAI/models:/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

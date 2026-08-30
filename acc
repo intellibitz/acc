@@ -1,0 +1,97 @@
+#!/bin/bash
+# ==============================================================================
+# AI COMMAND CENTER (ACC) - ULTIMATE SMART ORCHESTRATOR
+# ==============================================================================
+
+PROJECT_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+CORE_DIR="$PROJECT_ROOT/Core"
+RUN_DIR="$PROJECT_ROOT/Data/run"; mkdir -p "$RUN_DIR"
+INIT_SENTINEL="$PROJECT_ROOT/Data/.initialized"
+
+PROVISIONER="bash $CORE_DIR/provisioner.sh"
+OSM="bash $CORE_DIR/osm.sh"
+DASH_PID_FILE="$RUN_DIR/dash.pid"; LOCK_FILE="$RUN_DIR/acc.lock"
+
+log() { echo -e "[\033[1;34mACC\033[0m] $1"; }
+
+cleanup_dash() {
+    [ -f "$DASH_PID_FILE" ] && { pid=$(cat "$DASH_PID_FILE"); kill "$pid" 2>/dev/null; sleep 1; rm "$DASH_PID_FILE"; }
+    pkill -f "Scripts/tui_dashboard.py" 2>/dev/null
+}
+
+setup_env() {
+    log "Performing System Health Audit..."
+    local missing=()
+    for cmd in tmux aria2c jq hf ollama docker; do
+        if ! command -v $cmd &> /dev/null; then missing+=("$cmd"); fi
+    done
+
+    if [ ${#missing[@]} -gt 0 ]; then
+        log "\033[1;31mCRITICAL\033[0m: Missing required tools: [${missing[*]}]"
+        log "Please install them using your package manager (e.g., sudo apt install tmux aria2c jq)."
+        log "For hf-cli: pip install huggingface_hub"
+        exit 1
+    fi
+
+    log "Verifying Python dependencies..."
+    pip install -r "$PROJECT_ROOT/requirements.txt" --quiet
+
+    mkdir -p "$PROJECT_ROOT/Logs" "$PROJECT_ROOT/Downloads" "$PROJECT_ROOT/Optimizations" "$PROJECT_ROOT/Data/Backups"
+
+    # Load HF Token if exists
+    if [ -z "$HF_TOKEN" ] && [ -f "$PROJECT_ROOT/.env" ]; then
+        export $(grep -v '^#' "$PROJECT_ROOT/.env" | xargs)
+    fi
+
+    # Initialize default config if missing
+    if [ ! -f "$PROJECT_ROOT/Config/fleet.conf" ]; then
+        echo "MODELS=(\"ollama|phi3|microsoft/Phi-3-mini-4k-instruct-gguf|*Q4_K_M.gguf|FAST|Q4_K_M|Lightweight|hf://microsoft/Phi-3-mini-4k-instruct-gguf\")" > "$PROJECT_ROOT/Config/fleet.conf"
+    fi
+
+    $OSM sync --auto; $OSM tune
+}
+
+smart_start() {
+    if [ ! -f "$INIT_SENTINEL" ]; then
+        log "\033[1;35mFIRST RUN\033[0m: Initializing Elite Workstation..."
+        setup_env; $PROVISIONER maintain
+        touch "$INIT_SENTINEL"; log "[SUCCESS] Ready."
+    fi
+    systemctl is-active --quiet ollama || { log "Starting Ollama..."; sudo systemctl start ollama; sleep 2; }
+    if [ -n "$TMUX" ]; then bash "$PROJECT_ROOT/acc" dash; return; fi
+    tmux has-session -t ACC 2>/dev/null
+    if [ $? -eq 0 ]; then tmux attach-session -t ACC; else
+        cleanup_dash
+        tmux new-session -d -s ACC -n "Dashboard" "bash $PROJECT_ROOT/acc dash"
+        tmux split-window -v -p 25 -t ACC:0 "bash $PROJECT_ROOT/acc logs"
+        tmux select-pane -t 0; tmux attach-session -t ACC
+    fi
+}
+
+METHOD="hf"
+for arg in "$@"; do [[ "$arg" == --method=* ]] && METHOD="${arg#--method=}"; done
+
+case "$1" in
+    setup) setup_env ;;
+    up) [ -f "$LOCK_FILE" ] && { log "Busy."; exit 1; }; touch "$LOCK_FILE"; $PROVISIONER maintain --method "$METHOD"; rm "$LOCK_FILE" ;;
+    dash) cleanup_dash; python3 "$PROJECT_ROOT/Scripts/tui_dashboard.py" ;;
+    status) $OSM status ;;
+    sync) $OSM sync ;;
+    tune-hw) $OSM tune ;;
+    update-ollama) $OSM update-engine ;;
+    rotate) $OSM rotate ;;
+    fitness) $PROVISIONER fitness ;;
+    search) $PROVISIONER search "$2" ;;
+    add) $PROVISIONER add "$2" ;;
+    remove) $PROVISIONER remove "$2" ;;
+    tune-model) $PROVISIONER tune-model "$2" "$3" ;;
+    prune) $PROVISIONER prune ;;
+    backup) $PROVISIONER backup ;;
+    proxy) log "Starting LiteLLM Proxy..."; litellm --model ollama/phi3 ;;
+    agent) python3 "$PROJECT_ROOT/Agents/autonomous_architect.py" ;;
+    brain) cat "$PROJECT_ROOT/brain.md" ;;
+    logs) tail -f "$PROJECT_ROOT/Logs/provisioner.log" ;;
+    stop) cleanup_dash; tmux kill-session -t ACC 2>/dev/null; $OSM stop; log "Down." ;;
+    ""|help) [[ -z "$1" ]] && smart_start || echo "Usage: ./acc [setup|up|dash|status|sync|tune-hw|update-ollama|rotate|fitness|search|add|remove|prune|backup|proxy|stop]" ;;
+    *) echo "Unknown: $1"; exit 1 ;;
+esac
