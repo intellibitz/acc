@@ -46,12 +46,23 @@ setup_env() {
     # Load HF Token if exists (safely)
     if [ -z "$HF_TOKEN" ] && [ -f "$PROJECT_ROOT/.env" ]; then
         # Filter out common read-only/system variables and source the rest
+        # Using a more surgical approach to avoid shell-specific read-only errors
         while IFS= read -r line || [[ -n "$line" ]]; do
             [[ "$line" =~ ^#.* ]] && continue
             [[ -z "$line" ]] && continue
-            key="${line%%=*}"
-            if [[ "$key" != "PWD" && "$key" != "SHLVL" && "$key" != "_" && "$key" != "UID" && "$key" != "EUID" ]]; then
-                export "$line" 2>/dev/null
+            if [[ "$line" == *"="* ]]; then
+                key="${line%%=*}"
+                value="${line#*=}"
+                # Explicitly skip variables that should never be exported manually
+                case "$key" in
+                    PWD|SHLVL|_|UID|EUID|BASH*|SHELL*|TERM*|DISPLAY|LANG|USER|HOME|PATH) ;;
+                    *)
+                        # Use a subshell test to see if it's exportable
+                        if (export "$key=$value") >/dev/null 2>&1; then
+                            export "$key=$value"
+                        fi
+                        ;;
+                esac
             fi
         done < "$PROJECT_ROOT/.env"
     fi
