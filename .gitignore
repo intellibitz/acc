@@ -1,4 +1,4 @@
-# AI Command Center (ACC) - Global Git Ignore
+# AI Command Center (ACC) - Professional Git Ignore
 
 # System & OS
 .DS_Store
@@ -12,10 +12,8 @@ Thumbs.db
 Downloads/
 Optimizations/
 Archives/
-Data/run/
-Data/Backups/
-Data/.initialized
-Data/LocalAI/models/
+Data/
+Logs/
 
 # Android Specific
 .gradle/
@@ -24,12 +22,31 @@ local.properties
 Captures/
 *.apk
 *.aar
-.idea/caches/
+*.iml
+.navigation/
+
+# IntelliJ / Android Studio
+.idea/usage.statistics.xml
+.idea/librarySources.xml
+.idea/shelf/
 .idea/workspace.xml
+.idea/navEditor.xml
+.idea/caches/
 .idea/libraries/
 .idea/modules.xml
+.idea/deploymentTargetSelector.xml
 .idea/deploymentTargetDropDown.xml
-*.iml
+.idea/AndroidProjectSystem.xml
+.idea/appInsightsSettings.xml
+.idea/compiler.xml
+.idea/externalDependencies.xml
+.idea/gradle.xml
+.idea/kotlinc.xml
+.idea/misc.xml
+.idea/planningMode.xml
+.idea/vcs.xml
+.idea/assetWizardSettings.xml
+.idea/modules/
 
 # Python
 __pycache__/
@@ -40,6 +57,9 @@ venv/
 .env
 pip-log.txt
 pip-delete-this-directory.txt
+
+# User Private Scripts & Utilities
+.gitignored_folder/
 
 # Models & Manifests
 *.gguf
