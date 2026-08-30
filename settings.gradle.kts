@@ -15,6 +15,7 @@ pluginManagement {
 }
 
 dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
         google {
             mavenContent {
@@ -31,9 +32,9 @@ plugins {
     id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 }
 
-include(":app:androidApp")
-include(":app:desktopApp")
-include(":app:shared")
-include(":app:webApp")
-include(":core")
-include(":server")
+include(":frontend:android")
+include(":frontend:desktop")
+include(":frontend:composeApp")
+include(":frontend:web")
+include(":common")
+include(":gateway")

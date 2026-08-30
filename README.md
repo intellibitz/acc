@@ -3,23 +3,35 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform: Linux](https://img.shields.io/badge/Platform-Linux%20%2F%20WSL2-blue.svg)](https://ubuntu.com/)
 [![Engine: Backend-Agnostic](https://img.shields.io/badge/Engine-Ollama%20%7C%20LocalAI%20%7C%20vLLM-blueviolet.svg)](https://litellm.ai/)
+[![Frontend: Kotlin Multiplatform](https://img.shields.io/badge/Frontend-Compose%20Wasm%20%7C%20Android%20%7C%20Desktop-green.svg)](https://kotlinlang.org/docs/multiplatform.html)
 
-**AI Command Center (acc)** is the elite orchestration environment for AI Agents and LLMs. It transforms your workstation into a professional-grade AI cockpit with **zero-effort** provisioning, real-time visual monitoring, and multi-tier hardware tuning.
+**AI Command Center (acc)** is the elite orchestration environment for AI Agents and LLMs. It transforms your workstation into a professional-grade AI cockpit with **zero-effort** provisioning, real-time visual monitoring, and a high-performance **Kotlin Multiplatform** frontend.
 
-Run any open-source model—from Phi-3 to Llama 3.1 70B—with a single command.
+Run any open-source model—from Phi-3 to Llama 3.1 70B—with a single command and watch their "thoughts" stream in real-time.
 
 ---
 
 ## 🌟 Vision: Zero Effort, Infinite Intelligence
 acc is designed for the developer who wants to *use* AI, not fight with dependencies.
+- **Unified Visual Interface**: A high-performance Compose Multiplatform app (Wasm, Android, Desktop) for real-time agent observability.
+- **Thought Stream**: Visualize the agent's internal reasoning process (the "hidden thoughts") as they happen.
+- **Tool Visualization**: Transparently monitor tool calls (shell commands, file edits) in a terminal-style interface.
 - **Master Orchestrator**: Just type `acc` to start.
-- **Visual Dashboard**: Real-time TUI tracking CPU, RAM, and NVIDIA GPU metrics (Temp/Power).
+- **Visual Dashboard**: Real-time TUI tracking CPU, RAM, and NVIDIA GPU metrics.
 - **Backend Agnostic**: Native support for **Ollama**, **LocalAI**, and **vLLM** via LiteLLM abstraction.
-- **Private Fleet**: Separate your paid/private models (OpenAI, Anthropic, private fine-tunes) using the git-ignored `Config/private_fleet.conf`.
-- **Elite Integration**: Seamlessly connect your existing agents, external engines, and cloud APIs.
-- **Smart Provisioning**: Resilient multi-connection downloads (Aria2/HF-CLI) with automated reassembly.
-- **Elite Tuning**: Automated kernel and driver optimization for maximum tokens-per-second.
-- **Autonomous Intelligence**: Built-in "Architect" agents and interactive chat for instant reasoning.
+- **Private Fleet**: Separate your paid/private models using the git-ignored `config/private_fleet.conf`.
+- **Smart Provisioning**: Resilient multi-connection downloads (Aria2/HF-CLI).
+- **Elite Tuning**: Automated kernel and driver optimization for maximum performance.
+
+---
+
+## 🏗️ Project Structure (Standard Format)
+acc is organized into a clean, professional architecture:
+- **`frontend/`**: The "Deck" (UI). Contains `composeApp` (shared logic) and platform targets (`android`, `desktop`, `web`).
+- **`brain/`**: The intelligence layer containing Python agents and LLM orchestration.
+- **`gateway/`**: The Ktor-based communication bridge (WebSocket Hub).
+- **`common/`**: Shared protocols and data models (Kotlin Multiplatform).
+- **`tooling/`**: Utility scripts for benchmarking and maintenance.
 
 ---
 
@@ -33,13 +45,16 @@ cd acc
 # 2. Install & Link
 ./install.sh
 
-# 3. Launch the visual dashboard
+# 3. Launch the visual dashboard (TUI)
 acc dash
+
+# 4. Start the Agent Bridge
+acc agent
 ```
 
 ---
 
-## ⌨️ Dashboard Controls
+## ⌨️ Dashboard Controls (TUI)
 The visual dashboard provides a centralized hub for your entire fleet:
 
 | Key | Action | Logic |
@@ -60,7 +75,7 @@ The visual dashboard provides a centralized hub for your entire fleet:
 ## 🛠️ Prerequisites
 - **OS**: Linux (Ubuntu/Debian) or WSL2.
 - **Hardware**: NVIDIA GPU (Optional, but highly recommended).
-- **Toolchain**: `docker`, `tmux`, `aria2c`, `jq`, `python3`.
+- **Toolchain**: `docker`, `tmux`, `aria2c`, `jq`, `python3`, `OpenJDK 17+`.
 
 ---
 

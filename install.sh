@@ -20,7 +20,7 @@ done
 
 # 2. Make script executable
 chmod +x "$PROJECT_ROOT/acc"
-chmod +x "$PROJECT_ROOT/core/"*.sh
+chmod +x "$PROJECT_ROOT/common/"*.sh
 
 # 3. Create symlink
 if [ -L "$BIN_TARGET" ]; then

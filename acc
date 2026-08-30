@@ -4,9 +4,9 @@
 # ==============================================================================
 
 PROJECT_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-CORE_DIR="$PROJECT_ROOT/core"
-RUN_DIR="$PROJECT_ROOT/Data/run"; mkdir -p "$RUN_DIR"
-INIT_SENTINEL="$PROJECT_ROOT/Data/.initialized"
+CORE_DIR="$PROJECT_ROOT/common"
+RUN_DIR="$PROJECT_ROOT/data/run"; mkdir -p "$RUN_DIR"
+INIT_SENTINEL="$PROJECT_ROOT/data/.initialized"
 
 PROVISIONER="bash $CORE_DIR/provisioner.sh"
 OSM="bash $CORE_DIR/osm.sh"
@@ -16,7 +16,7 @@ log() { echo -e "[\033[1;34macc\033[0m] $1"; }
 
 cleanup_dash() {
     [ -f "$DASH_PID_FILE" ] && { pid=$(cat "$DASH_PID_FILE"); kill "$pid" 2>/dev/null; sleep 1; rm "$DASH_PID_FILE"; }
-    pkill -f "Scripts/tui_dashboard.py" 2>/dev/null
+    pkill -f "tooling/tui_dashboard.py" 2>/dev/null
 }
 
 setup_env() {
@@ -36,7 +36,7 @@ setup_env() {
     log "Verifying Python dependencies..."
     pip install -r "$PROJECT_ROOT/requirements.txt" --quiet
 
-    mkdir -p "$PROJECT_ROOT/Logs" "$PROJECT_ROOT/Downloads" "$PROJECT_ROOT/Optimizations" "$PROJECT_ROOT/Data/Backups"
+    mkdir -p "$PROJECT_ROOT/logs" "$PROJECT_ROOT/downloads" "$PROJECT_ROOT/optimizations" "$PROJECT_ROOT/data/backups"
 
     # Load HF Token if exists
     if [ -z "$HF_TOKEN" ] && [ -f "$PROJECT_ROOT/.env" ]; then
@@ -44,8 +44,8 @@ setup_env() {
     fi
 
     # Initialize default config if missing
-    if [ ! -f "$PROJECT_ROOT/Config/fleet.conf" ]; then
-        echo "MODELS=(\"ollama|phi3|microsoft/Phi-3-mini-4k-instruct-gguf|*Q4_K_M.gguf|FAST|Q4_K_M|Lightweight|hf://microsoft/Phi-3-mini-4k-instruct-gguf\")" > "$PROJECT_ROOT/Config/fleet.conf"
+    if [ ! -f "$PROJECT_ROOT/config/fleet.conf" ]; then
+        echo "MODELS=(\"ollama|phi3|microsoft/Phi-3-mini-4k-instruct-gguf|*Q4_K_M.gguf|FAST|Q4_K_M|Lightweight|hf://microsoft/Phi-3-mini-4k-instruct-gguf\")" > "$PROJECT_ROOT/config/fleet.conf"
     fi
 
     $OSM sync --auto; $OSM tune
@@ -74,7 +74,7 @@ for arg in "$@"; do [[ "$arg" == --method=* ]] && METHOD="${arg#--method=}"; don
 case "$1" in
     setup) setup_env ;;
     up) [ -f "$LOCK_FILE" ] && { log "Busy."; exit 1; }; touch "$LOCK_FILE"; $PROVISIONER maintain --method "$METHOD"; rm "$LOCK_FILE" ;;
-    dash) cleanup_dash; python3 "$PROJECT_ROOT/Scripts/tui_dashboard.py" ;;
+    dash) cleanup_dash; python3 "$PROJECT_ROOT/tooling/tui_dashboard.py" ;;
     status) $OSM status ;;
     sync) $OSM sync ;;
     tune-hw) $OSM tune ;;
@@ -89,19 +89,19 @@ case "$1" in
     backup) $PROVISIONER backup ;;
     proxy)
         log "Starting LiteLLM Proxy..."
-        if [ -f "$PROJECT_ROOT/Config/litellm_config.yaml" ]; then
-            litellm --config "$PROJECT_ROOT/Config/litellm_config.yaml"
+        if [ -f "$PROJECT_ROOT/config/litellm_config.yaml" ]; then
+            litellm --config "$PROJECT_ROOT/config/litellm_config.yaml"
         else
             log "[WARN] No litellm_config.yaml found. Using default Ollama bridge."
             litellm --model ollama/phi3
         fi
         ;;
-    agent) python3 "$PROJECT_ROOT/Agents/autonomous_architect.py" ;;
+    agent) python3 "$PROJECT_ROOT/brain/autonomous_architect.py" ;;
     chat) log "Opening Interactive Chat..."; ollama run "${2:-phi3}" ;;
-    benchmark) python3 "$PROJECT_ROOT/Scripts/benchmark_ollama.py" ;;
+    benchmark) python3 "$PROJECT_ROOT/tooling/benchmark_ollama.py" ;;
     auto-scale) log "Auto-scaling fleet to hardware capabilities..."; $PROVISIONER auto-scale ;;
     brain) cat "$PROJECT_ROOT/brain.md" ;;
-    logs) tail -f "$PROJECT_ROOT/Logs/provisioner.log" ;;
+    logs) tail -f "$PROJECT_ROOT/logs/provisioner.log" ;;
     stop) cleanup_dash; tmux kill-session -t acc 2>/dev/null; $OSM stop; log "Down." ;;
     ""|help) [[ -z "$1" ]] && smart_start || echo "Usage: ./acc [setup|up|dash|status|sync|tune-hw|update-ollama|rotate|fitness|search|add|remove|prune|backup|proxy|agent|chat|benchmark|auto-scale|stop]" ;;
     *) echo "Unknown: $1"; exit 1 ;;

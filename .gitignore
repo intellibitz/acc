@@ -29,11 +29,11 @@ Thumbs.db
 .initialized
 
 # Data & Blobs (Large files stored locally)
-Downloads/
-Optimizations/
-Archives/
-Data/
-Logs/
+downloads/
+optimizations/
+archives/
+data/
+logs/
 
 # Android Specific
 .gradle/
@@ -78,9 +78,6 @@ venv/
 pip-log.txt
 pip-delete-this-directory.txt
 
-# User Private Scripts & Utilities
-.gitignored_folder/
-
 # Models & Manifests
 *.gguf
 *.part*
@@ -89,7 +86,7 @@ last_sync_sha
 user_params
 fleet.conf.local
 private_fleet.conf
-Config/private_fleet.conf
+config/private_fleet.conf
 
 # Docker
 .docker/
