@@ -15,7 +15,13 @@ DL_METHOD="hf"
 log() { local msg="[$(date +'%Y-%m-%d %H:%M:%S')] $1"; echo -e "$msg" | tee -a "$LOG_FILE"; }
 
 FLEET_CONF="$PROJECT_ROOT/Config/fleet.conf"
+PRIVATE_FLEET_CONF="$PROJECT_ROOT/Config/private_fleet.conf"
+
 if [ -f "$FLEET_CONF" ]; then source "$FLEET_CONF"; else MODELS=(); fi
+if [ -f "$PRIVATE_FLEET_CONF" ]; then source "$PRIVATE_FLEET_CONF"; fi
+
+# Merge fleets for orchestration
+ALL_MODELS=("${MODELS[@]}" "${PRIVATE_MODELS[@]}")
 
 OSM_CMD="bash $CORE_DIR/osm.sh"
 ARCHITECT_MANIFESTO="You are the Master Architect, an elite Android Lead Engineer."
@@ -162,10 +168,44 @@ auto_scale() {
     log "[INFO] Use 'acc add' to customize your fleet further."
 }
 
+save_fleet() {
+    printf "MODELS=(\n" > "$FLEET_CONF"
+    for m in "${MODELS[@]}"; do printf "    \"%s\"\n" "$m"; done >> "$FLEET_CONF"
+    printf ")\n" >> "$FLEET_CONF"
+    log "[SUCCESS] Fleet configuration saved."
+}
+
+save_private_fleet() {
+    printf "PRIVATE_MODELS=(\n" > "$PRIVATE_FLEET_CONF"
+    for m in "${PRIVATE_MODELS[@]}"; do printf "    \"%s\"\n" "$m"; done >> "$PRIVATE_FLEET_CONF"
+    printf ")\n" >> "$PRIVATE_FLEET_CONF"
+    log "[SUCCESS] Private fleet configuration saved."
+}
+
+remove_model() {
+    local name=$1; local new_fleet=(); local found=false
+    for m in "${MODELS[@]}"; do
+        IFS='|' read -r m_name rest <<< "$m"
+        [[ "$m_name" == "$name" ]] && found=true && continue
+        new_fleet+=("$m")
+    done
+    if [ "$found" = true ]; then MODELS=("${new_fleet[@]}"); save_fleet; return; fi
+
+    new_fleet=(); found=false
+    for m in "${PRIVATE_MODELS[@]}"; do
+        IFS='|' read -r m_name rest <<< "$m"
+        [[ "$m_name" == "$name" ]] && found=true && continue
+        new_fleet+=("$m")
+    done
+    if [ "$found" = true ]; then PRIVATE_MODELS=("${new_fleet[@]}"); save_private_fleet; return; fi
+    log "[ERROR] Model '$name' not found in any fleet."
+}
+
 # Parse args
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         --method) DL_METHOD="$2"; shift ;;
+        --private) IS_PRIVATE="true" ;;
         maintain|provision|fitness|prune|backup|auto-scale) CMD="$1" ;;
         search) CMD="search"; QUERY="$2"; shift ;;
         add) CMD="add"; ENTRY="$2"; shift ;;
@@ -176,9 +216,15 @@ while [[ "$#" -gt 0 ]]; do
 done
 
 case "$CMD" in
-    maintain) for entry in "${MODELS[@]}"; do provision_model "$entry"; done ;;
+    maintain) for entry in "${ALL_MODELS[@]}"; do provision_model "$entry"; done ;;
     search) search_hf "$QUERY" ;;
-    add) MODELS+=("$ENTRY"); save_fleet ;;
+    add)
+        if [ "$IS_PRIVATE" == "true" ]; then
+            PRIVATE_MODELS+=("$ENTRY"); save_private_fleet
+        else
+            MODELS+=("$ENTRY"); save_fleet
+        fi
+        ;;
     remove) remove_model "$NAME" ;;
     tune-model) tune_model "$T_NAME" "$T_PARAMS" ;;
     prune) prune_fleet ;;

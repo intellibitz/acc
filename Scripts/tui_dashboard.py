@@ -71,15 +71,23 @@ class OllamaDashboard:
 
     def get_fleet_config(self):
         fleet_path = os.path.join(PROJECT_ROOT, "Config/fleet.conf")
-        managed_models = []
-        if os.path.exists(fleet_path):
-            try:
-                f = open(fleet_path, 'r')
-                content = f.read(); f.close()
-                matches = re.findall(r'"([^"|]+\|[^"]+)"', content)
-                for m in matches: managed_models.append(m.split('|')[0])
-            except: pass
-        return managed_models
+        private_path = os.path.join(PROJECT_ROOT, "Config/private_fleet.conf")
+        managed = []
+        private = []
+        
+        def parse_conf(path, target_list):
+            if os.path.exists(path):
+                try:
+                    with open(path, 'r') as f:
+                        content = f.read()
+                        # Match provider|name pattern
+                        matches = re.findall(r'"([^"|]+\|[^"|]+)\|', content)
+                        for m in matches: target_list.append(m.split('|')[1])
+                except: pass
+
+        parse_conf(fleet_path, managed)
+        parse_conf(private_path, private)
+        return managed, private
 
     def get_params_from_file(self, path):
         params = {}
@@ -144,19 +152,37 @@ class OllamaDashboard:
         return Panel(t, title="[bold white]HARDWARE[/]", border_style="cyan")
 
     def make_fleet_status(self) -> Panel:
-        status = self.get_ollama_status(); managed = self.get_fleet_config()
+        status = self.get_ollama_status()
+        managed, private = self.get_fleet_config()
         table = Table(box=box.SIMPLE, expand=True)
-        table.add_column("MODEL", style="bold white"); table.add_column("INST", justify="center"); table.add_column("STATE", justify="center")
+        table.add_column("MODEL", style="bold white")
+        table.add_column("INST", justify="center")
+        table.add_column("TYPE", justify="center")
+        table.add_column("STATE", justify="center")
+
         if not status["online"]: return Panel(Text("OFFLINE", style="bold red"), title="FLEET", border_style="red")
-        installed_names = []; [installed_names.append(m["name"].split(":")[0]) for m in status["models"]]
-        running_names = []; [running_names.append(r["name"].split(":")[0]) for r in status["running"]]
-        all_m = managed[:]
-        for n in installed_names:
-            if n not in all_m: all_m.append(n)
+        
+        installed_names = [m["name"].split(":")[0] for m in status["models"]]
+        running_names = [r["name"].split(":")[0] for r in status["running"]]
+        
+        all_m = list(set(managed + private + installed_names))
         all_m.sort()
+        
         for name in all_m:
-            is_inst = name in installed_names; is_run = name in running_names
-            table.add_row(Text(name, style="bold white" if name in managed else "dim white"), "[green]YES[/]" if is_inst else "[red]NO[/]", "[bold green]RUN[/]" if is_run else "[dim]IDLE[/]")
+            is_inst = name in installed_names
+            is_run = name in running_names
+            is_private = name in private
+            is_managed = name in managed or is_private
+            
+            type_str = "[magenta]PRIV[/]" if is_private else "[cyan]COMM[/]"
+            name_style = "bold white" if is_managed else "dim white"
+            
+            table.add_row(
+                Text(name, style=name_style),
+                "[green]YES[/]" if is_inst else "[red]NO[/]",
+                type_str,
+                "[bold green]RUN[/]" if is_run else "[dim]IDLE[/]"
+            )
         return Panel(table, title="[bold white]FLEET ({})[/]".format(len(all_m)), border_style="green")
 
     def make_progress_pane(self) -> Panel:

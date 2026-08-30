@@ -82,7 +82,7 @@ case "$1" in
     rotate) $OSM rotate ;;
     fitness) $PROVISIONER fitness ;;
     search) $PROVISIONER search "$2" ;;
-    add) $PROVISIONER add "$2" ;;
+    add) $PROVISIONER add "$2" "$3" ;;
     remove) $PROVISIONER remove "$2" ;;
     tune-model) $PROVISIONER tune-model "$2" "$3" ;;
     prune) $PROVISIONER prune ;;
