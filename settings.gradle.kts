@@ -15,7 +15,7 @@ pluginManagement {
 }
 
 dependencyResolutionManagement {
-    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
+    repositoriesMode.set(RepositoriesMode.PREFER_PROJECT)
     repositories {
         google {
             content {
@@ -25,11 +25,6 @@ dependencyResolutionManagement {
             }
         }
         mavenCentral()
-        maven {
-            url = uri("https://nodejs.org/dist")
-            content { includeGroup("org.nodejs") }
-            metadataSources { artifact() }
-        }
     }
 }
 
