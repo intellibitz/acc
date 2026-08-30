@@ -111,9 +111,13 @@ provision_model() {
 
     ollama rm "$target_name" >/dev/null 2>&1
     if [[ "$provider" == "ollama" ]]; then
-        if ollama create "$target_name" -f "$model_opt_dir/Modelfile"; then
+        log "[REGISTER] Creating model $target_name..."
+        if ollama create "$target_name" -f "$model_opt_dir/Modelfile" 2>&1 | tee -a "$LOG_FILE"; then
             log "[SUCCESS] $target_name active."; echo "$remote_sha" > "$local_sha_file"; rm -rf "$model_dl_dir"
-        else log "[ERROR] Build failed."; return 1; fi
+        else
+            log "[ERROR] Ollama build failed for $target_name. Check logs."
+            return 1
+        fi
     elif [[ "$provider" == "external" || "$provider" == "openai" ]]; then
         log "[ATTACH] External model '$target_name' detected. Skipping provisioning."
         echo "EXTERNAL" > "$local_sha_file"

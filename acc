@@ -43,9 +43,17 @@ setup_env() {
 
     mkdir -p "$PROJECT_ROOT/logs" "$PROJECT_ROOT/downloads" "$PROJECT_ROOT/optimizations" "$PROJECT_ROOT/data/backups"
 
-    # Load HF Token if exists
+    # Load HF Token if exists (safely)
     if [ -z "$HF_TOKEN" ] && [ -f "$PROJECT_ROOT/.env" ]; then
-        export $(grep -v '^#' "$PROJECT_ROOT/.env" | xargs)
+        # Filter out common read-only/system variables and source the rest
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            [[ "$line" =~ ^#.* ]] && continue
+            [[ -z "$line" ]] && continue
+            key="${line%%=*}"
+            if [[ "$key" != "PWD" && "$key" != "SHLVL" && "$key" != "_" && "$key" != "UID" && "$key" != "EUID" ]]; then
+                export "$line" 2>/dev/null
+            fi
+        done < "$PROJECT_ROOT/.env"
     fi
 
     # Initialize default config if missing
