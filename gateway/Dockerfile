@@ -32,7 +32,7 @@ COPY --from=builder /app/gateway/build/resources/main/static static/
 # Copy bridge and scripts
 COPY brain/ brain/
 COPY requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt
+RUN pip3 install --no-cache-dir -r requirements.txt huggingface-hub
 
 # Environment Setup
 ENV PROJECT_ROOT=/app

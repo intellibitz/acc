@@ -45,14 +45,16 @@ Acc is **Unified & Universal**. Run the installer for your OS to launch your coc
 
 ### 🐧 Linux & 🍎 macOS
 ```bash
-python3 -c "$(curl -fsSL https://raw.githubusercontent.com/intellibitz/acc/main/acc.py)" setup
-python3 -c "$(curl -fsSL https://raw.githubusercontent.com/intellibitz/acc/main/acc.py)"
+curl -sSL https://raw.githubusercontent.com/intellibitz/acc/main/acc.py -o acc.py
+python3 acc.py setup
+python3 acc.py
 ```
 
 ### 🪟 Windows (PowerShell)
 ```powershell
-python -c "(iwr https://raw.githubusercontent.com/intellibitz/acc/main/acc.py).Content" setup
-python -c "(iwr https://raw.githubusercontent.com/intellibitz/acc/main/acc.py).Content"
+iwr https://raw.githubusercontent.com/intellibitz/acc/main/acc.py -OutFile acc.py
+python acc.py setup
+python acc.py
 ```
 
 Once installed, just run `python3 acc.py` to start.
@@ -78,6 +80,7 @@ The `acc` script acts as a smart dispatcher for your workstation:
 | **`python3 acc.py stop`** | Gracefully shutdown all services and agents. |
 | **`python3 acc.py uninstall`** | Completely remove Acc and reclaim all disk space. |
 | **`python3 acc.py add`** | Add a new model/provider to your fleet. |
+| **`python3 acc.py optimize`** | Tune host hardware for AI workloads (Linux only). |
 
 ### 🔧 Maintenance (The Mechanic)
 | Command | Action |

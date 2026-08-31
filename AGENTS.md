@@ -35,6 +35,8 @@ To keep the "Zero-Effort" promise to Normal Users, we use a fully automated rele
 - [x] Implement **On-Demand Agent Spawning** for Multi-Engine fleets (Local & Cloud).
 - [x] Refactor into **AI-Neutral Folder Structure** (`registry/`, `.cache/`).
 - [x] Implement **Automated Release Pipeline** via GitHub Actions.
+- [x] Sanitize **Uninstall Logic** (Safety First) and remove non-standard Python dependencies.
+- [x] Implement **Multi-Distro Linux Support** (dnf/pacman) and decoupled hardware tuning.
 - [ ] Implement integrated E2E journey tests for the Provisioning flow.
 
 See [docs/testing.md](docs/testing.md) for verification commands.

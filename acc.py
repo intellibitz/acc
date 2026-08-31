@@ -11,12 +11,11 @@ import json
 import shutil
 import platform
 import time
-import requests
 from pathlib import Path
+import urllib.request
 
 # --- Configuration ---
 PROJECT_ROOT = Path(__file__).parent.absolute()
-VENV_DIR = PROJECT_ROOT / ".venv"
 CONFIG_DIR = PROJECT_ROOT / "config"
 LOGS_DIR = PROJECT_ROOT / "logs"
 CACHE_DIR = PROJECT_ROOT / ".cache"
@@ -45,45 +44,48 @@ def ensure_system_deps():
     
     if missing:
         log(f"Missing tools: {missing}. Attempting auto-install...")
-        if platform.system() == "Linux":
+        os_type = platform.system()
+        if os_type == "Linux":
             if shutil.which("apt-get"):
                 run_shell(f"apt-get update -qq && apt-get install -y {' '.join(['docker.io' if m=='docker' else m for m in missing])}", sudo=True)
-        elif platform.system() == "Darwin":
+            elif shutil.which("dnf"):
+                run_shell(f"dnf install -y {' '.join(['docker' if m=='docker' else m for m in missing])}", sudo=True)
+            elif shutil.which("pacman"):
+                run_shell(f"pacman -S --noconfirm {' '.join(['docker' if m=='docker' else m for m in missing])}", sudo=True)
+        elif os_type == "Darwin":
             if shutil.which("brew"):
                 run_shell(f"brew install {' '.join([m for m in missing if m != 'docker'])}")
                 if "docker" in missing: log("Please install Docker Desktop for Mac.")
-        elif platform.system() == "Windows":
+        elif os_type == "Windows":
             if shutil.which("winget"):
                 for m in missing:
                     if m == "docker": log("Please install Docker Desktop for Windows.")
                     else: run_shell(f"winget install {m}")
         else:
-            error(f"Auto-install not supported on {platform.system()}. Please install manually: {missing}")
+            error(f"Auto-install not supported on {os_type}. Please install manually: {missing}")
             sys.exit(1)
 
 def tune_hardware():
-    if platform.system() == "Windows":
-        log("[SKIP] System-level hardware tuning is managed via Windows settings or WSL.")
+    if platform.system() != "Linux":
+        log(f"[SKIP] Hardware tuning not implemented for {platform.system()}.")
         return
 
-    log("Applying System-Level Optimizations...")
-    
-    # 1. CPU Governor
-    if shutil.which("cpupower"):
-        try: run_shell("cpupower frequency-set -g performance", sudo=True)
-        except: pass
+    log("Applying System-Level Optimizations (Requires Sudo)...")
+    try:
+        # 1. CPU Governor
+        if shutil.which("cpupower"):
+            run_shell("cpupower frequency-set -g performance", sudo=True)
+        
+        # 2. GPU Persistence
+        if shutil.which("nvidia-smi"):
+            run_shell("nvidia-smi -pm 1", sudo=True)
 
-    # 2. GPU Persistence
-    if shutil.which("nvidia-smi"):
-        try: run_shell("nvidia-smi -pm 1", sudo=True)
-        except: pass
-
-    # 3. Kernel VM Tuning (Linux only)
-    if platform.system() == "Linux":
-        try:
-            run_shell('echo "vm.swappiness=1" | tee /etc/sysctl.d/99-llm-hw.conf', sudo=True)
-            run_shell('sysctl -p /etc/sysctl.d/99-llm-hw.conf', sudo=True)
-        except: pass
+        # 3. Kernel VM Tuning
+        run_shell('echo "vm.swappiness=1" | tee /etc/sysctl.d/99-llm-hw.conf', sudo=True)
+        run_shell('sysctl -p /etc/sysctl.d/99-llm-hw.conf', sudo=True)
+        log("[SUCCESS] Hardware optimized.")
+    except Exception as e:
+        error(f"Tuning failed: {str(e)}")
 
 def setup_env():
     ensure_system_deps()
@@ -107,26 +109,27 @@ def setup_env():
         default_fleet = {"models": [{"provider": "ollama", "name": "phi3", "repo": "microsoft/Phi-3-mini-4k-instruct-gguf", "filePattern": "*Q4_K_M.gguf", "tier": "FAST", "quant": "Q4_K_M", "isPrivate": False}]}
         with open(fleet_json, "w") as f: json.dump(default_fleet, f, indent=4)
 
-    tune_hardware()
+    log("[SUCCESS] Environment ready. Run 'acc.py optimize' if you want to tune hardware.")
 
 def smart_start():
     health_url = "http://localhost:8333/health"
     try:
-        if requests.get(health_url, timeout=1).status_code == 200:
-            log("Acc Cockpit is active.")
-            open_dashboard()
-            return
+        with urllib.request.urlopen(health_url, timeout=1) as response:
+            if response.status == 200:
+                log("Acc Cockpit is active.")
+                open_dashboard()
+                return
     except: pass
 
     compose_file = PROJECT_ROOT / "docker-compose.yml"
     if not compose_file.exists():
         log("Fetching deployment configuration...")
-        resp = requests.get("https://raw.githubusercontent.com/intellibitz/acc/main/docker-compose.yml")
-        with open(compose_file, "wb") as f: f.write(resp.content)
+        url = "https://raw.githubusercontent.com/intellibitz/acc/main/docker-compose.yml"
+        with urllib.request.urlopen(url) as response, open(compose_file, "wb") as f:
+            f.write(response.read())
 
     if shutil.which("docker"):
         log("Launching via Docker (Zero-Effort Integrity)...")
-        # Creator Mode check
         if (PROJECT_ROOT / ".git").exists() and (PROJECT_ROOT / "docker-compose.override.yml").exists():
             run_shell("docker compose up -d")
         else:
@@ -138,10 +141,11 @@ def smart_start():
     log("Waiting for Cockpit to come online...")
     for _ in range(30):
         try:
-            if requests.get(health_url, timeout=1).status_code == 200:
-                log("[SUCCESS] Cockpit online.")
-                open_dashboard()
-                return
+            with urllib.request.urlopen(health_url, timeout=1) as response:
+                if response.status == 200:
+                    log("[SUCCESS] Cockpit online.")
+                    open_dashboard()
+                    return
         except: pass
         time.sleep(2)
     error("Manager failed to start. Check docker logs.")
@@ -190,17 +194,10 @@ def handle_dev_commands(args):
         run_shell(f'git commit -m "docs: release notes for {next_version}"')
         run_shell(f'git tag -a "{next_version}" -m "Stable Release {next_version}"')
         run_shell(f"git push origin {branch} --tags")
-    
-    elif args.dev == "push":
-        log("Syncing changes to GitHub...")
-        run_shell("git add .")
-        msg = input("[PROMPT] Commit message: ")
-        run_shell(f'git commit -m "{msg if msg else "dev: routine sync"}"')
-        run_shell("git push origin main")
 
 def main():
     parser = argparse.ArgumentParser(description="AI Command Center Orchestrator")
-    parser.add_argument("command", nargs="?", default="help", help="Command to run (setup, up, stop, uninstall, dev)")
+    parser.add_argument("command", nargs="?", default="help", help="Command to run (setup, up, stop, uninstall, dev, optimize)")
     parser.add_argument("subcommand", nargs="?", help="Subcommand or argument")
     parser.add_argument("--force", action="store_true", help="Force action (for uninstall)")
     parser.add_argument("--dev", choices=["test", "release", "push", "benchmark"], help="Dev commands")
@@ -208,10 +205,13 @@ def main():
     args = parser.parse_args()
 
     if args.command == "setup": setup_env()
+    elif args.command == "optimize": tune_hardware()
     elif args.command == "up":
         url = "http://localhost:8333/provisioning/up"
         if args.subcommand: url += f"?model={args.subcommand}"
-        try: requests.post(url)
+        try:
+            req = urllib.request.Request(url, method="POST")
+            urllib.request.urlopen(req)
         except: error("Gateway not responding. Is Acc running?")
     elif args.command == "stop":
         log("Stopping infrastructure...")
@@ -221,17 +221,23 @@ def main():
             error("Uninstall blocked: Creator directory detected.")
             sys.exit(1)
         if not args.force:
-            confirm = input("[PROMPT] This will completely remove Acc. Are you sure? (y/N): ")
+            confirm = input("[PROMPT] This will delete all Acc data (models, configs). Are you sure? (y/N): ")
             if confirm.lower() != 'y': sys.exit(0)
+        
         if shutil.which("docker"): run_shell("docker compose down -v")
-        shutil.rmtree(PROJECT_ROOT)
-        log("Acc uninstalled.")
+        
+        log("Reclaiming disk space...")
+        # SAFE DELETE: Only delete known subdirectories
+        for d in [CONFIG_DIR, LOGS_DIR, CACHE_DIR, REGISTRY_DIR, DATA_DIR]:
+            if d.exists(): shutil.rmtree(d)
+        
+        log("Acc data removed. You can now delete the 'acc.py' file manually.")
     elif args.command == "dev":
         handle_dev_commands(args)
     elif args.command in ["help", None]:
         smart_start()
     else:
-        log(f"Redirecting command '{args.command}' to engine-specific handlers...")
+        log(f"Unknown command '{args.command}'.")
 
 if __name__ == "__main__":
     main()
