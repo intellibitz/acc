@@ -1,7 +1,7 @@
 # 🚀 AI Command Center (acc)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Platform: Universal](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20WSL2-blue.svg)](https://docker.com/)
+[![Platform: Universal](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-blue.svg)](https://docker.com/)
 [![Engine: Backend-Agnostic](https://img.shields.io/badge/Engine-Ollama%20%7C%20LocalAI%20%7C%20vLLM-blueviolet.svg)](https://litellm.ai/)
 [![Frontend: Kotlin Multiplatform](https://img.shields.io/badge/Frontend-Compose%20Wasm%20%7C%20Android%20%7C%20Desktop-green.svg)](https://kotlinlang.org/docs/multiplatform.html)
 
@@ -16,7 +16,7 @@ acc is designed for the developer who wants to *use* AI, not fight with dependen
 - **Unified Visual Interface**: A high-performance Compose Multiplatform app (Wasm, Android, Desktop) for real-time agent observability.
 - **Thought Stream**: Visualize the agent's internal reasoning process (the "hidden thoughts") as they happen.
 - **Tool Visualization**: Transparently monitor tool calls (shell commands, file edits) in a terminal-style interface.
-- **Master Orchestrator**: Just type `acc` to start. Docker-first for zero host pollution.
+- **Master Orchestrator**: A unified **Python-based** orchestrator (`acc.py`) for cross-platform consistency. Just type `acc` to start.
 - **On-Demand Spawning**: Instantly spawn specialized agent bridges (NLE, Architect, Researcher) for any model in your fleet.
 - **Visual Dashboard**: Real-time TUI tracking CPU, RAM, and hardware metrics (NVIDIA CUDA / Apple Silicon) via the **HWT** (Hardware Tuner).
 - **Backend Agnostic**: Native support for **Ollama**, **LocalAI**, and **vLLM**, plus integration with cloud providers like **OpenAI**, **Anthropic**, and **Gemini**.
@@ -41,10 +41,16 @@ acc is organized into a clean, professional architecture:
 
 ## 🚀 Quick Start (True Zero Effort)
 
-Acc is **Container-First**. Run the one-liner to install the universal orchestrator and launch your cockpit instantly:
+Acc is **Container-First**. Run the one-liner for your OS to install and launch your cockpit instantly:
 
+### 🐧 Linux & 🍎 macOS
 ```bash
 curl -sSL https://raw.githubusercontent.com/intellibitz/acc/main/install.sh | bash
+```
+
+### 🪟 Windows (PowerShell)
+```powershell
+iwr -useb https://raw.githubusercontent.com/intellibitz/acc/main/install.ps1 | iex
 ```
 
 Once installed, simply run:
@@ -110,10 +116,9 @@ acc maintains high stability through a multi-layered testing strategy:
 ---
 
 ## 🛠️ Prerequisites
-- **OS**: Linux (Ubuntu/Debian), macOS (Apple Silicon/Intel), or WSL2.
-- **Engine**: **Docker** (Required for "Zero-Footprint" mode).
-- **Hardware**: NVIDIA GPU or Apple Silicon (Highly recommended).
-- **Auto-Managed**: `jq`, `curl` (Attempted auto-installation on setup).
+- **OS**: Linux (Ubuntu/Debian), macOS (Apple Silicon/Intel), or Windows 10/11.
+- **Engine**: **Docker Desktop** (Required for "Zero-Footprint" mode).
+- **Hardware**: NVIDIA GPU, Apple Silicon, or generic CPU.
 
 ---
 

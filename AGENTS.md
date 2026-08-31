@@ -31,7 +31,7 @@ To keep the "Zero-Effort" promise to Normal Users, we use a fully automated rele
     - Create a GitHub Release with the latest `acc` script and `docker-compose.yml`.
 
 ## 🧪 Ongoing Missions
-- [x] Pivot to **Container-First** architecture and **Universal macOS support**.
+- [x] Pivot to **Container-First** architecture and **Full Universal OS support** (Windows, Linux, macOS) via unified **Python Orchestration** (`acc.py`).
 - [x] Implement integrated `acc uninstall` for total system restoration.
 - [x] Implement **On-Demand Agent Spawning** for Multi-Engine fleets (Local & Cloud).
 - [x] Refactor into **AI-Neutral Folder Structure** (`registry/`, `.cache/`).

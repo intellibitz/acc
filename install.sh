@@ -41,6 +41,7 @@ fi
 mkdir -p "$INSTALL_DIR"
 log "Downloading latest orchestrator..."
 curl -sSL "https://raw.githubusercontent.com/$REPO/main/acc" -o "$INSTALL_DIR/acc"
+curl -sSL "https://raw.githubusercontent.com/$REPO/main/acc.py" -o "$INSTALL_DIR/acc.py"
 chmod +x "$INSTALL_DIR/acc"
 
 # Link to bin
@@ -48,7 +49,7 @@ ln -sf "$INSTALL_DIR/acc" "$BIN_DIR/acc"
 
 log "Initializing environment..."
 cd "$INSTALL_DIR"
-./acc setup --minimal # Optional flag or just rely on the new resilience
+./acc setup
 
 log "Fetching pre-built assets..."
 curl -sSL "https://raw.githubusercontent.com/$REPO/main/docker-compose.yml" -o "$INSTALL_DIR/docker-compose.yml"

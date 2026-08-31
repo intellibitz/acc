@@ -1,0 +1,207 @@
+#!/usr/bin/env python3
+# ==============================================================================
+# AI COMMAND CENTER (acc) - UNIFIED CROSS-PLATFORM ORCHESTRATOR
+# ==============================================================================
+
+import os
+import sys
+import subprocess
+import argparse
+import json
+import shutil
+import platform
+import time
+import requests
+from pathlib import Path
+
+# --- Configuration ---
+PROJECT_ROOT = Path(__file__).parent.absolute()
+VENV_DIR = PROJECT_ROOT / ".venv"
+CONFIG_DIR = PROJECT_ROOT / "config"
+LOGS_DIR = PROJECT_ROOT / "logs"
+CACHE_DIR = PROJECT_ROOT / ".cache"
+REGISTRY_DIR = PROJECT_ROOT / "registry"
+DATA_DIR = PROJECT_ROOT / "data"
+
+def log(msg): print(f"[\033[1;34macc\033[0m] {msg}")
+def error(msg): print(f"[\033[1;31merror\033[0m] {msg}", file=sys.stderr)
+
+def run_shell(cmd, cwd=PROJECT_ROOT, check=True, capture=False):
+    try:
+        result = subprocess.run(cmd, shell=True, cwd=str(cwd), check=check, 
+                                capture_output=capture, text=True)
+        return result.stdout.strip() if capture else result.returncode
+    except subprocess.CalledProcessError as e:
+        if not capture: error(f"Command failed: {cmd}")
+        raise e
+
+def ensure_system_deps():
+    log("Auditing system dependencies...")
+    missing = []
+    for cmd in ["docker", "jq", "curl"]:
+        if not shutil.which(cmd): missing.append(cmd)
+    
+    if missing:
+        log(f"Missing tools: {missing}. Attempting auto-install...")
+        if platform.system() == "Linux":
+            if shutil.which("apt-get"):
+                run_shell(f"sudo apt-get update -qq && sudo apt-get install -y {' '.join(['docker.io' if m=='docker' else m for m in missing])}")
+        elif platform.system() == "Darwin":
+            if shutil.which("brew"):
+                run_shell(f"brew install {' '.join([m for m in missing if m != 'docker'])}")
+                if "docker" in missing: log("Please install Docker Desktop for Mac.")
+        elif platform.system() == "Windows":
+            if shutil.which("winget"):
+                for m in missing:
+                    if m == "docker": log("Please install Docker Desktop for Windows.")
+                    else: run_shell(f"winget install {m}")
+        else:
+            error(f"Auto-install not supported on {platform.system()}. Please install manually: {missing}")
+            sys.exit(1)
+
+def setup_env():
+    ensure_system_deps()
+    
+    for d in [LOGS_DIR, CACHE_DIR, REGISTRY_DIR, DATA_DIR / "backups", CONFIG_DIR]:
+        d.mkdir(parents=True, exist_ok=True)
+
+    keystore = CONFIG_DIR / "keystore.p12"
+    if not keystore.exists():
+        log("Generating secure local identity...")
+        if shutil.which("keytool"):
+            run_shell(f'keytool -genkeypair -alias acc -keyalg RSA -keysize 2048 -storetype PKCS12 '
+                      f'-keystore "{keystore}" -validity 365 -storepass password -keypass password '
+                      f'-dname "CN=localhost, OU=acc, O=intellibitz, L=Unknown, ST=Unknown, C=Unknown"')
+        else:
+            log("[SKIP] 'keytool' not found. Skipping keystore generation.")
+
+    fleet_json = CONFIG_DIR / "fleet.json"
+    if not fleet_json.exists():
+        log("Initializing default fleet...")
+        default_fleet = {"models": [{"name": "phi3", "repo": "microsoft/Phi-3-mini-4k-instruct-gguf", "filePattern": "*Q4_K_M.gguf", "tier": "FAST", "quant": "Q4_K_M", "isPrivate": False}]}
+        with open(fleet_json, "w") as f: json.dump(default_fleet, f, indent=4)
+
+    hwt_script = PROJECT_ROOT / "common" / "hwt.sh"
+    if hwt_script.exists() and platform.system() != "Windows":
+        run_shell(f"bash {hwt_script} tune")
+
+def smart_start():
+    health_url = "http://localhost:8333/health"
+    try:
+        if requests.get(health_url, timeout=1).status_code == 200:
+            log("Acc Cockpit is active.")
+            open_url("http://localhost:8333")
+            return
+    except: pass
+
+    compose_file = PROJECT_ROOT / "docker-compose.yml"
+    if not compose_file.exists():
+        log("Fetching deployment configuration...")
+        resp = requests.get("https://raw.githubusercontent.com/intellibitz/acc/main/docker-compose.yml")
+        with open(compose_file, "wb") as f: f.write(resp.content)
+
+    if shutil.which("docker"):
+        log("Launching via Docker (Zero-Effort Integrity)...")
+        # Creator Mode check
+        if (PROJECT_ROOT / ".git").exists() and (PROJECT_ROOT / "docker-compose.override.yml").exists():
+            run_shell("docker compose up -d")
+        else:
+            run_shell(f"docker compose -f {compose_file} up -d")
+    else:
+        error("Docker not found. Please install Docker to use Acc.")
+        sys.exit(1)
+
+    log("Waiting for Cockpit to come online...")
+    for _ in range(30):
+        try:
+            if requests.get(health_url, timeout=1).status_code == 200:
+                log("[SUCCESS] Cockpit online.")
+                open_url("http://localhost:8333")
+                return
+        except: pass
+        time.sleep(2)
+    error("Manager failed to start. Check docker logs.")
+
+def open_url(url):
+    import webbrowser
+    webbrowser.open(url)
+
+def handle_dev_commands(args):
+    if not (PROJECT_ROOT / ".git").exists():
+        error("Dev commands only available in Creator/Source mode.")
+        return
+
+    if args.dev == "test":
+        current_tag = run_shell("git describe --tags --abbrev=0", capture=True) or "v0.0.0"
+        import re
+        base_match = re.match(r'^(v\d+\.\d+\.\d+)', current_tag)
+        base_version = base_match.group(1) if base_match else "v0.0.0"
+        
+        if "-test." in current_tag:
+            suffix = int(current_tag.split(".")[-1])
+            next_tag = f"{base_version}-test.{suffix + 1}"
+        else:
+            parts = list(map(int, base_version[1:].split('.')))
+            parts[2] += 1
+            next_tag = f"v{parts[0]}.{parts[1]}.{parts[2]}-test.1"
+        
+        log(f"Tagging Test Release: {next_tag}")
+        run_shell(f'git tag -a "{next_tag}" -m "Test Release {next_tag}"')
+        run_shell(f'git push origin "{next_tag}"')
+
+    elif args.dev == "release":
+        current_tag = run_shell("git describe --tags --abbrev=0", capture=True) or "v0.0.0"
+        parts = list(map(int, (re.match(r'^v(\d+\.\d+\.\d+)', current_tag).group(1)).split('.')))
+        next_version = f"v{parts[0]}.{parts[1] + 1}.0"
+        
+        log(f"Creating Stable Release: {next_version}")
+        branch = f"release/{next_version}"
+        run_shell(f"git checkout -b {branch}")
+        
+        notes = f"# Release {next_version}\n\n## Changes\n"
+        notes += run_shell(f'git log {current_tag}..HEAD --oneline --pretty=format:"* %s"', capture=True)
+        with open(PROJECT_ROOT / "RELEASE_NOTES.md", "w") as f: f.write(notes)
+        
+        run_shell("git add RELEASE_NOTES.md")
+        run_shell(f'git commit -m "docs: release notes for {next_version}"')
+        run_shell(f'git tag -a "{next_version}" -m "Stable Release {next_version}"')
+        run_shell(f"git push origin {branch} --tags")
+
+def main():
+    parser = argparse.ArgumentParser(description="AI Command Center Orchestrator")
+    parser.add_argument("command", nargs="?", default="help", help="Command to run (setup, up, stop, uninstall, gui, dev)")
+    parser.add_argument("subcommand", nargs="?", help="Subcommand or argument")
+    parser.add_argument("--force", action="store_true", help="Force action (for uninstall)")
+    parser.add_argument("--dev", choices=["test", "release", "push", "benchmark"], help="Dev commands")
+
+    args = parser.parse_args()
+
+    if args.command == "setup": setup_env()
+    elif args.command == "up":
+        url = "http://localhost:8333/provisioning/up"
+        if args.subcommand: url += f"?model={args.subcommand}"
+        requests.post(url)
+    elif args.command == "stop":
+        log("Stopping infrastructure...")
+        run_shell("docker compose down -v")
+    elif args.command == "uninstall":
+        if (PROJECT_ROOT / ".git").exists():
+            error("Uninstall blocked: Creator directory detected.")
+            sys.exit(1)
+        if not args.force:
+            confirm = input("[PROMPT] This will completely remove Acc. Are you sure? (y/N): ")
+            if confirm.lower() != 'y': sys.exit(0)
+        run_shell("docker compose down -v")
+        shutil.rmtree(PROJECT_ROOT)
+        bin_link = Path.home() / ".local" / "bin" / "acc"
+        if bin_link.exists(): bin_link.unlink()
+        log("Acc uninstalled.")
+    elif args.command == "dev":
+        handle_dev_commands(args)
+    elif args.command in ["help", None]:
+        smart_start()
+    else:
+        log(f"Redirecting command '{args.command}' to engine-specific handlers...")
+
+if __name__ == "__main__":
+    main()
