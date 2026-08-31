@@ -65,6 +65,26 @@ class SupervisorService(private val projectRoot: File) {
         startWorker("AGENT_$agentName")
     }
 
+    fun startEngine(provider: String) {
+        scope.launch {
+            try {
+                println("[Supervisor] Starting engine provider: $provider")
+                val process = ProcessBuilder("docker", "compose", "up", "-d", provider)
+                    .directory(projectRoot)
+                    .redirectErrorStream(true)
+                    .start()
+                
+                process.inputStream.bufferedReader().useLines { lines ->
+                    lines.forEach { println("[Docker] $it") }
+                }
+                process.waitFor()
+                println("[Supervisor] Engine provider $provider started.")
+            } catch (e: Exception) {
+                println("[Supervisor] Failed to start engine $provider: ${e.message}")
+            }
+        }
+    }
+
     fun startWorker(name: String) {
         workers[name]?.start()
     }

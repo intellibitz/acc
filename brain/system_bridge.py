@@ -139,7 +139,8 @@ def get_system_state():
             "diskUsage": disk
         },
         "fleet": fleet,
-        "proxyOnline": False
+        "proxyOnline": False,
+        "engineOnline": ollama.get("online", False)
     }
 
 if __name__ == "__main__":

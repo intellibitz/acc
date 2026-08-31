@@ -154,6 +154,7 @@ fun Application.module() {
                         fleet = Json.decodeFromJsonElement<List<ModelStatus>>(bridgeData["fleet"]!!),
                         partialDownloads = Json.decodeFromJsonElement<List<String>>(bridgeData["partialDownloads"]!!),
                         proxyOnline = Json.decodeFromJsonElement<Boolean>(bridgeData["proxyOnline"]!!),
+                        engineOnline = bridgeData["engineOnline"]?.jsonPrimitive?.boolean ?: false,
                         workers = supervisorService.workerStates.value,
                         provisioning = provisioningService.updates.value.values.toList(),
                         statusMsg = systemStatusMsg
@@ -249,6 +250,12 @@ fun Application.module() {
             
             supervisorService.spawnAgent(agentName, model, apiBase)
             call.respondText("Agent $agentName spawned for model $model.")
+        }
+
+        post("/engine/start") {
+            val provider = call.request.queryParameters["provider"] ?: "ollama"
+            supervisorService.startEngine(provider)
+            call.respondText("Starting engine: $provider")
         }
 
         webSocket("/ws/ui") {

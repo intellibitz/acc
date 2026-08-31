@@ -63,7 +63,12 @@ fun App() {
                         
                         // Right: System Stats & Fleet
                         Box(modifier = Modifier.width(300.dp).fillMaxHeight().padding(8.dp)) {
-                            SystemPanel(systemState, onCommand = { consoleVm.runCommand(it) }, onSpawn = { name, model -> systemVm.spawnAgent(name, model) })
+                            SystemPanel(
+                                systemState, 
+                                onCommand = { consoleVm.runCommand(it) }, 
+                                onSpawn = { name, model -> systemVm.spawnAgent(name, model) },
+                                onStartEngine = { provider -> systemVm.startEngine(provider) }
+                            )
                         }
                     }
                     

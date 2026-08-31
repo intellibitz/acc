@@ -79,6 +79,7 @@ data class SystemState(
     val provisioning: List<ProvisioningUpdate> = emptyList(),
     val partialDownloads: List<String> = emptyList(),
     val proxyOnline: Boolean,
+    val engineOnline: Boolean = true, // Track if local engine (e.g. Ollama) is up
     val statusMsg: String
 )
 

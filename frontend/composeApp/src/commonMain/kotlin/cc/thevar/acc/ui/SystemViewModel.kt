@@ -76,4 +76,20 @@ class SystemViewModel : ViewModel() {
             }
         }
     }
+
+    fun startEngine(provider: String) {
+        viewModelScope.launch {
+            try {
+                val host = "localhost"
+                val port = 8333
+                client.post("https://$host:$port/engine/start") {
+                    url {
+                        parameters.append("provider", provider)
+                    }
+                }
+            } catch (e: Exception) {
+                println("Engine start failed: ${e.message}")
+            }
+        }
+    }
 }

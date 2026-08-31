@@ -1,9 +1,8 @@
-version: '3.8'
-
 services:
   acc-gateway:
     volumes:
       - .:/app # Mount source for hot-reloading bridge logic
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - DEBUG=true
 

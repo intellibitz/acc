@@ -43,7 +43,7 @@ fun ThoughtStream(messages: List<AgentMessage>) {
 }
 
 @Composable
-fun SystemPanel(state: SystemState?, onCommand: (String) -> Unit, onSpawn: (String, String) -> Unit) {
+fun SystemPanel(state: SystemState?, onCommand: (String) -> Unit, onSpawn: (String, String) -> Unit, onStartEngine: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("HARDWARE STATUS", style = MaterialTheme.typography.labelLarge, color = Color.Gray)
         
@@ -57,6 +57,31 @@ fun SystemPanel(state: SystemState?, onCommand: (String) -> Unit, onSpawn: (Stri
             }
             Text("Disk Usage: ${stats.diskUsage}", fontSize = 11.sp, color = Color.LightGray)
         } ?: Text("Loading stats...", color = Color.DarkGray)
+
+        if (state?.engineOnline == false) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.Red.copy(alpha = 0.1f)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color.Red.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Error, null, tint = Color.Red, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Ollama is offline", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Red)
+                        Text("Start engine to use local models", fontSize = 9.sp, color = Color.LightGray)
+                    }
+                    Button(
+                        onClick = { onStartEngine("ollama") },
+                        modifier = Modifier.height(28.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red.copy(alpha = 0.2f), contentColor = Color.Red)
+                    ) {
+                        Text("Start", fontSize = 10.sp)
+                    }
+                }
+            }
+        }
 
         Spacer(modifier = Modifier.height(8.dp))
         Text("FLEET STATUS", style = MaterialTheme.typography.labelLarge, color = Color.Gray)
