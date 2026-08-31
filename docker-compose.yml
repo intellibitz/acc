@@ -19,6 +19,8 @@ services:
     profiles: ["engine"]
     ports:
       - "11434:11434"
+    env_file:
+      - config/ollama.env
     environment:
       - OLLAMA_MODELS=/root/.ollama
     volumes:
