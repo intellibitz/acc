@@ -198,7 +198,7 @@ case "$1" in
         fi
 
         log "WARNING: This will completely remove Acc and all AI models."
-        read -p "[PROMPT] Are you sure? (y/N) " -n 1 -r
+        read -p "[PROMPT] Are you sure? (y/N) " -n 1 -r </dev/tty
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             log "Stopping infrastructure..."

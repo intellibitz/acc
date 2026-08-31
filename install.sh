@@ -20,8 +20,9 @@ if [ -d "$INSTALL_DIR" ]; then
     echo "1) Update (Keep models and settings)"
     echo "2) Clean Reinstall (Fresh start - deletes everything)"
     echo "----------------------------------------------------"
-    read -p "[PROMPT] Select option [1/2]: " -n 1 -r
+    read -p "[PROMPT] Select option [1/2] (Default: 1): " -n 1 -r </dev/tty
     echo
+    REPLY=${REPLY:-1}
     if [[ $REPLY == "2" ]]; then
         log "Performing clean-up before installation..."
         if [ -x "$INSTALL_DIR/acc" ]; then
