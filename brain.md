@@ -18,6 +18,7 @@ don't reinvent the wheel, try to use lean opensource software wherever possible.
 do integrate all features together, and make sure its working as one.
 do deep thinking and fix root issues;
 do deep memory mapping of existing problems, and fix them one by one, until all problems fixed;
+do supervise and heal workers, making sure they are always running;
 do my work, 100%.. no ifs and no buts;
 do use all the tools that are available;
 do implement many features and functionalities together, but will complete each one of them 100%;

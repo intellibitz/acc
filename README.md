@@ -27,11 +27,11 @@ acc is designed for the developer who wants to *use* AI, not fight with dependen
 
 ## 🏗️ Project Structure (Standard Format)
 acc is organized into a clean, professional architecture:
-- **`frontend/`**: The "Deck" (UI). Contains `composeApp` (shared logic) and platform targets (`android`, `desktop`, `web`).
-- **`gateway/`**: The Ktor-based heart (WebSocket & Provisioning Hub). Replaces brittle bash logic with type-safe Kotlin services.
-- **`brain/`**: The intelligence layer containing Python agents and system metrics bridge.
-- **`common/`**: Shared protocols and data models (Kotlin Multiplatform).
-- **`tooling/`**: Maintainer and Developer utility scripts.
+- **`gateway/`**: The **Manager** (Control Plane). A high-performance Ktor hub that supervises all workers, handles provisioning, and serves the UI.
+- **`frontend/`**: The **Deck** (UI). A Compose Multiplatform app providing real-time observability and control.
+- **`brain/`**: The **Intelligence** layer. Managed Python workers for agents and system metrics.
+- **`common/`**: The **Registry**. Shared type-safe protocols and models for cross-platform integrity.
+- **`tooling/`**: The **Workshop**. Low-level scripts for project maintenance and benchmarking.
 
 ---
 
@@ -79,23 +79,12 @@ The `acc` script acts as a smart dispatcher for your workstation:
 | **`./acc dev push`** | Auto-stage and push project changes to GitHub. |
 | **`./acc dev benchmark`** | Run the token-per-second (TPS) performance suite. |
 
----
-
-## ⌨️ Dashboard Controls (TUI)
-The visual dashboard provides a centralized hub for your entire fleet:
-
-| Key | Action | Logic |
-| :--- | :--- | :--- |
-| **`1`** | **Provision** | Auto-download and optimize the latest fleet models. |
-| **`V`** | **Sync** | Synchronize service configurations and model manifests. |
-| **`Z`** | **Auto-Scale** | Hardware-aware fleet optimization based on VRAM/RAM. |
-| **`J`** | **Benchmark** | Track TPS (Tokens/Sec) and TTFT (Time to First Token). |
-| **`W`** | **Chat** | Launch an interactive side-by-side chat session with any model. |
-| **`Y`** | **Proxy** | Start the LiteLLM gateway for OpenAI-compatible API access. |
-| **`G`** | **Agent** | Launch the Autonomous Architect AI lead agent. |
-| **`T`** | **Tune HW** | Apply low-level Linux kernel optimizations for AI performance. |
-| **`S`** | **HF Search** | Discovery models directly from Hugging Face. |
-| **`A`** | **Add** | Add a new model to your managed fleet string. |
+## 🛡️ Self-Healing Architecture
+acc is built like a production container orchestrator:
+- **Manager-Worker Model**: The Gateway acts as a Control Plane, supervising all background processes.
+- **Auto-Heal**: If a metrics bridge or agent crashes, the Manager automatically detects and restarts it.
+- **Bootstrap UI**: In fresh environments, the Manager serves a live "Bootstrap Page" showing real-time build and setup progress until the cockpit is ready.
+- **Zero-Conf Pathing**: Advanced project root detection allows acc to run reliably from any directory.
 
 ---
 
