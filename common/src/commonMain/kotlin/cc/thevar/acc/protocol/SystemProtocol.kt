@@ -30,10 +30,37 @@ data class ModelStatus(
 )
 
 @Serializable
+data class ModelManifest(
+    val name: String,
+    val provider: String = "ollama",
+    val repo: String,
+    val filePattern: String,
+    val tier: String = "FAST",
+    val quant: String = "Q4_K_M",
+    val superpower: String = "General",
+    val isPrivate: Boolean = false
+)
+
+@Serializable
+enum class ProvisioningStage {
+    IDLE, SCANNING, DOWNLOADING, MERGING, REGISTERING, COMPLETED, ERROR
+}
+
+@Serializable
+data class ProvisioningUpdate(
+    val modelName: String,
+    val stage: ProvisioningStage,
+    val progress: Float = 0f,
+    val speed: String = "",
+    val message: String = ""
+)
+
+@Serializable
 data class SystemState(
     val stats: SystemStats,
     val fleet: List<ModelStatus>,
-    val partialDownloads: List<String>,
+    val provisioning: List<ProvisioningUpdate> = emptyList(),
+    val partialDownloads: List<String> = emptyList(),
     val proxyOnline: Boolean,
     val statusMsg: String
 )

@@ -66,7 +66,8 @@ fun App() {
                 // Sidebar: Controls
                 Sidebar(
                     systemState = systemState,
-                    onCommand = { consoleVm.runCommand(it) }
+                    onCommand = { consoleVm.runCommand(it) },
+                    onUpdate = { systemVm.updateSystem() }
                 )
                 
                 // Main Content: Split Middle and Right
@@ -94,13 +95,15 @@ fun App() {
 }
 
 @Composable
-fun Sidebar(systemState: SystemState?, onCommand: (String) -> Unit) {
+fun Sidebar(systemState: SystemState?, onCommand: (String) -> Unit, onUpdate: () -> Unit) {
     Column(
         modifier = Modifier.width(200.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surface).padding(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text("CONTROLS", style = MaterialTheme.typography.labelLarge, color = Color.Gray)
         
+        ControlButton("Update Acc", Icons.Default.SystemUpdate, Color.Magenta) { onUpdate() }
+
         systemState?.partialDownloads?.takeIf { it.isNotEmpty() }?.let { partials ->
             Card(
                 colors = CardDefaults.cardColors(containerColor = Color.Yellow.copy(alpha = 0.1f)),

@@ -1,6 +1,8 @@
 package cc.thevar.acc
 
 import cc.thevar.acc.protocol.*
+import cc.thevar.acc.service.FleetManager
+import cc.thevar.acc.service.ProvisioningService
 import io.ktor.serialization.kotlinx.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
@@ -53,6 +55,10 @@ fun main() {
 val uiSessions = Collections.newSetFromMap(ConcurrentHashMap<DefaultWebSocketServerSession, Boolean>())
 val systemSessions = Collections.newSetFromMap(ConcurrentHashMap<DefaultWebSocketServerSession, Boolean>())
 
+val projectRoot = File(".").absoluteFile.parentFile ?: File(".")
+val fleetManager = FleetManager(File(projectRoot, "config"))
+val provisioningService = ProvisioningService(projectRoot, fleetManager)
+
 fun Application.module() {
     install(WebSockets) {
         contentConverter = KotlinxWebsocketSerializationConverter(Json)
@@ -89,6 +95,18 @@ fun Application.module() {
         }
     }
 
+    // Launch background task for provisioning updates
+    launch(Dispatchers.IO) {
+        provisioningService.updates.collect { updates ->
+            val systemStateUpdate = Frame.Text(Json.encodeToString(updates.values.toList()))
+            uiSessions.forEach { session ->
+                session.launch {
+                    session.send(systemStateUpdate)
+                }
+            }
+        }
+    }
+
     routing {
         get("/") {
             call.respondFile(File("frontend/web/build/dist/wasmJs/productionExecutable/index.html"))
@@ -96,6 +114,21 @@ fun Application.module() {
 
         get("/health") {
             call.respondText("Acc Gateway is Online.")
+        }
+
+        post("/provisioning/up") {
+            provisioningService.provisionAll()
+            call.respondText("Provisioning started.")
+        }
+
+        post("/system/update") {
+            launch(Dispatchers.IO) {
+                delay(500) // Give response time to reach client
+                ProcessBuilder("./acc", "update")
+                    .directory(File("."))
+                    .start()
+            }
+            call.respondText("Update sequence initiated. Gateway will restart.")
         }
 
         // Endpoint for the UI to subscribe to updates
@@ -156,6 +189,23 @@ fun Application.module() {
                         uiSessions.forEach { session ->
                             session.launch {
                                 session.send(Frame.Text(text))
+                            }
+                        }
+                    }
+                }
+            } finally { }
+        }
+
+        // Endpoint for Provisioning Control
+        webSocket("/ws/provisioning") {
+            try {
+                for (frame in incoming) {
+                    if (frame is Frame.Text) {
+                        val cmd = frame.readText()
+                        when {
+                            cmd == "UP" -> provisioningService.provisionAll()
+                            cmd.startsWith("ADD|") -> {
+                                // Add logic
                             }
                         }
                     }

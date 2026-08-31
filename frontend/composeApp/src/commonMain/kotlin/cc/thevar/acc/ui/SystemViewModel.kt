@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import cc.thevar.acc.protocol.SystemState
 import io.ktor.client.*
 import io.ktor.client.plugins.websocket.*
+import io.ktor.client.request.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -42,6 +43,19 @@ class SystemViewModel : ViewModel() {
             if (frame is Frame.Text) {
                 val text = frame.readText()
                 _state.value = Json.decodeFromString<SystemState>(text)
+            }
+        }
+    }
+
+    fun updateSystem() {
+        viewModelScope.launch {
+            try {
+                // We use a simple HTTP POST for the update trigger
+                val host = "localhost" // Should be dynamic in real app
+                val port = 8333
+                client.post("https://$host:$port/system/update")
+            } catch (e: Exception) {
+                println("Update trigger failed: ${e.message}")
             }
         }
     }

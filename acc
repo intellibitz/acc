@@ -138,20 +138,60 @@ for arg in "$@"; do [[ "$arg" == --method=* ]] && METHOD="${arg#--method=}"; don
 
 case "$1" in
     setup) setup_env ;;
-    up) [ -f "$LOCK_FILE" ] && { log "Busy."; exit 1; }; touch "$LOCK_FILE"; $PROVISIONER maintain "$2" --method "$METHOD"; rm "$LOCK_FILE" ;;
+    up)
+        log "Triggering Elite Provisioning via Gateway..."
+        curl -skX POST https://localhost:8333/provisioning/up || {
+            log "[FALLBACK] Gateway unreachable. Using legacy provisioner."
+            [ -f "$LOCK_FILE" ] && { log "Busy."; exit 1; }; touch "$LOCK_FILE"; $PROVISIONER maintain "$2" --method "$METHOD"; rm "$LOCK_FILE"
+        }
+        ;;
     dash) cleanup_dash; python3 "$PROJECT_ROOT/tooling/tui_dashboard.py" ;;
     status) $OSM status ;;
     sync) $OSM sync ;;
     tune-hw) $OSM tune ;;
     update-ollama) $OSM update-engine ;;
-    rotate) $OSM rotate ;;
     fitness) $PROVISIONER fitness ;;
     search) $PROVISIONER search "$2" ;;
     add) $PROVISIONER add "$2" "$3" ;;
     remove) $PROVISIONER remove "$2" ;;
     tune-model) $PROVISIONER tune-model "$2" "$3" ;;
-    prune) $PROVISIONER prune ;;
     backup) $PROVISIONER backup ;;
+
+    # --- MAINTENANCE (The Mechanic) ---
+    maint)
+        case "$2" in
+            kill) bash "$PROJECT_ROOT/tooling/kill_gradle.sh" ;;
+            rotate) $OSM rotate ;;
+            prune) $PROVISIONER prune ;;
+            clean) rm -rf "$PROJECT_ROOT/data/run"/* ;;
+            *) echo "Usage: ./acc maint [kill|rotate|prune|clean]" ;;
+        esac
+        ;;
+
+    # --- DEVELOPER (The Architect) ---
+    dev)
+        case "$2" in
+            push) bash "$PROJECT_ROOT/tooling/push.sh" "$3" ;;
+            pull) git pull origin "$(git rev-parse --abbrev-ref HEAD)" ;;
+            benchmark) python3 "$PROJECT_ROOT/tooling/benchmark_ollama.py" ;;
+            *) echo "Usage: ./acc dev [push|pull|benchmark]" ;;
+        esac
+        ;;
+    refresh)
+        log "REFRESHING ACC..."
+        bash "$PROJECT_ROOT/acc" stop
+        bash "$PROJECT_ROOT/acc" setup
+        log "Restarting..."
+        exec bash "$PROJECT_ROOT/acc"
+        ;;
+    update)
+        log "UPDATING ACC TO LATEST..."
+        git pull origin "$(git rev-parse --abbrev-ref HEAD)"
+        bash "$PROJECT_ROOT/acc" setup
+        log "Update complete. Restarting services..."
+        bash "$PROJECT_ROOT/acc" stop
+        exec bash "$PROJECT_ROOT/acc"
+        ;;
     proxy)
         log "Starting LiteLLM Proxy..."
         if [ -f "$PROJECT_ROOT/config/litellm_config.yaml" ]; then
@@ -192,6 +232,6 @@ case "$1" in
         pkill -f "gateway"
         log "Down."
         ;;
-    ""|help) [[ -z "$1" ]] && smart_start || echo "Usage: ./acc [setup|up|dash|status|sync|tune-hw|update-ollama|rotate|fitness|search|add|remove|prune|backup|proxy|agent|chat|benchmark|auto-scale|stop]" ;;
+    ""|help) [[ -z "$1" ]] && smart_start || echo "Usage: ./acc [setup|up|dash|status|sync|tune-hw|update|maint|dev|proxy|agent|chat|stop]" ;;
     *) echo "Unknown: $1"; exit 1 ;;
 esac
