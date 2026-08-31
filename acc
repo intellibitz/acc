@@ -112,12 +112,16 @@ smart_start() {
             timeout=120
             while [ $timeout -gt 0 ]; do
                 if curl -sk http://localhost:8333/health > /dev/null; then
-                    log "[SUCCESS] Acc Visual Dashboard is live (HTTP)."
-                    open_url "http://localhost:8333"
-                    exit 0
-                elif curl -sk https://localhost:8333/health > /dev/null; then
-                    log "[SUCCESS] Acc Visual Dashboard is live (HTTPS)."
-                    open_url "https://localhost:8333"
+                    log "[SUCCESS] Acc Visual Dashboard is live."
+                    log "HTTP (Unsecure): http://localhost:8333"
+                    [ -f "$PROJECT_ROOT/config/keystore.p12" ] && log "HTTPS (Secure):   https://localhost:8334"
+
+                    # Prefer HTTPS if available, otherwise HTTP
+                    if [ -f "$PROJECT_ROOT/config/keystore.p12" ]; then
+                        open_url "https://localhost:8334"
+                    else
+                        open_url "http://localhost:8333"
+                    fi
                     exit 0
                 fi
                 sleep 2

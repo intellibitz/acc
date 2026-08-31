@@ -28,10 +28,10 @@ acc is designed for the developer who wants to *use* AI, not fight with dependen
 ## 🏗️ Project Structure (Standard Format)
 acc is organized into a clean, professional architecture:
 - **`frontend/`**: The "Deck" (UI). Contains `composeApp` (shared logic) and platform targets (`android`, `desktop`, `web`).
-- **`brain/`**: The intelligence layer containing Python agents and LLM orchestration.
-- **`gateway/`**: The Ktor-based communication bridge (WebSocket Hub).
+- **`gateway/`**: The Ktor-based heart (WebSocket & Provisioning Hub). Replaces brittle bash logic with type-safe Kotlin services.
+- **`brain/`**: The intelligence layer containing Python agents and system metrics bridge.
 - **`common/`**: Shared protocols and data models (Kotlin Multiplatform).
-- **`tooling/`**: Utility scripts for benchmarking and maintenance.
+- **`tooling/`**: Maintainer and Developer utility scripts.
 
 ---
 
@@ -50,11 +50,34 @@ cd acc
 
 ## 🏗️ The "Zero-Effort" Workflow
 When you run `acc` for the first time:
-1.  **Auto-Installation**: acc detects the new environment and runs a full dependency and health audit.
-2.  **Hardware Optimization**: It automatically tunes your Linux kernel and GPU for maximum AI performance.
-3.  **Model Provisioning**: It downloads and configures the latest fleet of high-performance models.
-4.  **Integrated Visual Dashboard**: It launches a Ktor Gateway and opens the high-performance **Visual Dashboard** in your browser.
-5.  **Unified Control**: Control everything from the browser—provision models, tune hardware, and watch agent thought streams in one place.
+1.  **Instant Visuals**: The dashboard launches immediately in your browser.
+2.  **Visual Bootstrapping**: acc performs a full dependency audit and hardware tuning while streaming status updates directly to your screen.
+3.  **Elite Provisioning**: Models are downloaded and optimized using hardware-aware logic within the Kotlin Gateway.
+4.  **Unified Control**: Control everything—provision models, tune hardware, and watch agent thought streams—from one place.
+
+## 🛠️ Orchestrator Commands
+The `acc` script acts as a smart dispatcher for your workstation:
+
+### 🎮 User (The Pilot)
+| Command | Action |
+| :--- | :--- |
+| **`./acc`** | Launch the Visual Dashboard and start infrastructure. |
+| **`./acc update`** | One-click upgrade: syncs code, runs setup, and restarts. |
+| **`./acc chat`** | Launch an interactive session with any model. |
+| **`./acc stop`** | Gracefully shutdown all services and agents. |
+
+### 🔧 Maintenance (The Mechanic)
+| Command | Action |
+| :--- | :--- |
+| **`./acc maint kill`** | Surgical purge of stale Java/Gradle/Kotlin processes. |
+| **`./acc maint prune`** | Reclaim disk space by cleaning the fleet and downloads. |
+| **`./acc maint rotate`** | Rotate and clean service logs. |
+
+### 📐 Developer (The Architect)
+| Command | Action |
+| :--- | :--- |
+| **`./acc dev push`** | Auto-stage and push project changes to GitHub. |
+| **`./acc dev benchmark`** | Run the token-per-second (TPS) performance suite. |
 
 ---
 
