@@ -107,10 +107,24 @@ smart_start() {
         # Setup TMUX for logs
         tmux new-session -d -s acc -n "Gateway" "bash $PROJECT_ROOT/acc logs"
 
-        # OPEN BROWSER IMMEDIATELY (Don't wait for health check)
-        # We try HTTP first as Gateway starts in HTTP during first-run bootstrap
-        log "Opening: http://localhost:8333"
-        (sleep 2 && open_url "http://localhost:8333") &
+        # Smart background waiter for the correct protocol
+        (
+            timeout=120
+            while [ $timeout -gt 0 ]; do
+                if curl -sk http://localhost:8333/health > /dev/null; then
+                    log "[SUCCESS] Acc Visual Dashboard is live (HTTP)."
+                    open_url "http://localhost:8333"
+                    exit 0
+                elif curl -sk https://localhost:8333/health > /dev/null; then
+                    log "[SUCCESS] Acc Visual Dashboard is live (HTTPS)."
+                    open_url "https://localhost:8333"
+                    exit 0
+                fi
+                sleep 2
+                ((timeout--))
+            done
+            log "\033[1;31mERROR\033[0m: Gateway timed out. Check logs/gateway.log"
+        ) &
     fi
 }
 
