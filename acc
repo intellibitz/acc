@@ -86,50 +86,29 @@ setup_env() {
 }
 
 smart_start() {
-    # 1. Start Infrastructure in background
-    systemctl is-active --quiet ollama || { log "Starting Ollama..."; sudo systemctl start ollama; sleep 1; }
+    # Reduced to Bootstrap Launcher
+    cleanup_dash
 
-    # 2. Check if we are in TMUX
-    if [ -n "$TMUX" ]; then
-        bash "$PROJECT_ROOT/acc" dash
-        return
-    fi
+    log "Starting AI Command Center [Manager]..."
+    bash "$PROJECT_ROOT/acc" gui > /dev/null 2>&1 &
 
-    tmux has-session -t acc 2>/dev/null
-    if [ $? -eq 0 ]; then
-        tmux attach-session -t acc
-    else
-        cleanup_dash
-        # Start Gateway immediately
-        log "Launching Acc Visual Dashboard..."
-        bash "$PROJECT_ROOT/acc" gui > /dev/null 2>&1 &
+    # Setup TMUX for logs
+    tmux has-session -t acc 2>/dev/null || tmux new-session -d -s acc -n "Gateway" "bash $PROJECT_ROOT/acc logs"
 
-        # Setup TMUX for logs
-        tmux new-session -d -s acc -n "Gateway" "bash $PROJECT_ROOT/acc logs"
-
-        # Smart background waiter for the correct protocol
-        (
-            timeout=120
-            while [ $timeout -gt 0 ]; do
-                if curl -sk http://localhost:8333/health > /dev/null; then
-                    log "[SUCCESS] Acc Visual Dashboard is live."
-                    log "HTTP (Unsecure): http://localhost:8333"
-                    [ -f "$PROJECT_ROOT/config/keystore.p12" ] && log "HTTPS (Secure):   https://localhost:8334"
-
-                    # Prefer HTTPS if available, otherwise HTTP
-                    if [ -f "$PROJECT_ROOT/config/keystore.p12" ]; then
-                        open_url "https://localhost:8334"
-                    else
-                        open_url "http://localhost:8333"
-                    fi
-                    exit 0
-                fi
-                sleep 2
-                ((timeout--))
-            done
-            log "\033[1;31mERROR\033[0m: Gateway timed out. Check logs/gateway.log"
-        ) &
-    fi
+    # Smart background waiter for the correct protocol
+    (
+        timeout=120
+        while [ $timeout -gt 0 ]; do
+            if curl -sk http://localhost:8333/health > /dev/null; then
+                log "[SUCCESS] Acc Manager is live."
+                open_url "http://localhost:8333"
+                exit 0
+            fi
+            sleep 2
+            ((timeout--))
+        done
+        log "\033[1;31mERROR\033[0m: Manager timed out. Check logs/gateway.log"
+    ) &
 }
 
 METHOD="hf"

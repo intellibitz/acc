@@ -56,8 +56,24 @@ data class ProvisioningUpdate(
 )
 
 @Serializable
+enum class WorkerStatus {
+    STOPPED, STARTING, RUNNING, CRASHED, COMPLETED
+}
+
+@Serializable
+data class WorkerState(
+    val name: String,
+    val status: WorkerStatus,
+    val pid: Int? = null,
+    val restarts: Int = 0,
+    val lastMsg: String = "",
+    val error: String? = null
+)
+
+@Serializable
 data class SystemState(
     val stats: SystemStats,
+    val workers: List<WorkerState> = emptyList(),
     val fleet: List<ModelStatus>,
     val provisioning: List<ProvisioningUpdate> = emptyList(),
     val partialDownloads: List<String> = emptyList(),

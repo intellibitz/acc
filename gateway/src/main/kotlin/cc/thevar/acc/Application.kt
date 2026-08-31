@@ -3,6 +3,7 @@ package cc.thevar.acc
 import cc.thevar.acc.protocol.*
 import cc.thevar.acc.service.FleetManager
 import cc.thevar.acc.service.ProvisioningService
+import cc.thevar.acc.service.SupervisorService
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.*
 import io.ktor.serialization.kotlinx.json.*
@@ -36,6 +37,7 @@ private fun findProjectRoot(): File {
 val projectRoot = findProjectRoot()
 val fleetManager = FleetManager(File(projectRoot, "config"))
 val provisioningService = ProvisioningService(projectRoot, fleetManager)
+val supervisorService = SupervisorService(projectRoot)
 
 val uiSessions = Collections.newSetFromMap(ConcurrentHashMap<DefaultWebSocketServerSession, Boolean>())
 val systemSessions = Collections.newSetFromMap(ConcurrentHashMap<DefaultWebSocketServerSession, Boolean>())
@@ -129,7 +131,9 @@ fun Application.module() {
                     val output = process.inputStream.bufferedReader().readText()
                     if (output.isNotEmpty()) {
                         val json = try {
+                            val statesJson = Json.encodeToString(supervisorService.workerStates.value)
                             output.replace("\"statusMsg\"\\s*:\\s*\"[^\"]*\"".toRegex(), "\"statusMsg\":\"$systemStatusMsg\"")
+                                  .replace("\"workers\"\\s*:\\s*\\[\\]".toRegex(), "\"workers\":$statesJson")
                         } catch (e: Exception) { output }
                         
                         sessionsToUpdate.forEach { session ->
@@ -154,9 +158,27 @@ fun Application.module() {
         }
     }
 
+    // Supervisor updates streaming
+    launch(Dispatchers.IO) {
+        supervisorService.workerStates.collect { states ->
+            val stateUpdate = Frame.Text(Json.encodeToString(states))
+            uiSessions.forEach { session ->
+                session.launch { try { session.send(stateUpdate) } catch (e: Exception) {} }
+            }
+        }
+    }
+
     routing {
         // Essential APIs
-        get("/health") { call.respondText("Acc Gateway is Online.") }
+        get("/health") {
+            val states = supervisorService.workerStates.value
+            val isHealthy = states.all { it.status == WorkerStatus.RUNNING || it.status == WorkerStatus.COMPLETED }
+            if (isHealthy) {
+                call.respondText("Acc Gateway is Online. All workers healthy.")
+            } else {
+                call.respond(HttpStatusCode.ServiceUnavailable, states)
+            }
+        }
 
         post("/provisioning/up") {
             provisioningService.provisionAll()
@@ -218,13 +240,43 @@ fun Application.module() {
         // STATIC CONTENT SERVING (MOVED AND CONFIGURED)
         val staticDir = File(projectRoot, "frontend/web/build/dist/wasmJs/productionExecutable")
         
-        // Manual root handler to avoid staticFiles default issues
+        // Manual root handler with Recovery/Bootstrap UI
         get("/") {
             val indexFile = File(staticDir, "index.html")
             if (indexFile.exists()) {
                 call.respondFile(indexFile)
             } else {
-                call.respondText("Acc Visual Dashboard is compiling... Please refresh.", status = HttpStatusCode.ServiceUnavailable)
+                val workerStates = supervisorService.workerStates.value
+                val builder = workerStates.find { it.name == "FRONTEND_BUILDER" }
+                
+                val bootstrapHtml = """
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <title>Acc Bootstrapping...</title>
+                        <style>
+                            body { background: #121212; color: #BB86FC; font-family: monospace; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+                            .loader { border: 4px solid #1E1E1E; border-top: 4px solid #BB86FC; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 20px; }
+                            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+                            .status { color: #03DAC6; font-size: 1.2em; }
+                        </style>
+                        <meta http-equiv="refresh" content="5">
+                    </head>
+                    <body>
+                        <div class="loader"></div>
+                        <div>AI Command Center is initializing...</div>
+                        <div class="status">Frontend Status: ${builder?.status ?: "WAITING"}</div>
+                        <div style="margin-top: 10px; color: gray; font-size: 0.8em;">(This page will auto-refresh when ready)</div>
+                    </body>
+                    </html>
+                """.trimIndent()
+                
+                call.respondText(bootstrapHtml, ContentType.Text.Html)
+                
+                // Trigger builder if not started
+                if (builder == null || builder.status == WorkerStatus.STOPPED) {
+                    supervisorService.startWorker("FRONTEND_BUILDER")
+                }
             }
         }
 

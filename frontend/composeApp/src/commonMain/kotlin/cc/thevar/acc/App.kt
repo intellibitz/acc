@@ -135,6 +135,26 @@ fun Sidebar(systemState: SystemState?, onCommand: (String) -> Unit, onUpdate: ()
         ControlButton("Benchmark", Icons.Default.Speed, Color.Yellow) { onCommand("benchmark") }
         ControlButton("Prune Models", Icons.Default.DeleteSweep, Color.Red) { onCommand("prune") }
         
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("WORKERS", style = MaterialTheme.typography.labelLarge, color = Color.Gray)
+        systemState?.workers?.forEach { worker ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.size(6.dp).clip(RoundedCornerShape(3.dp)).background(
+                    when(worker.status) {
+                        WorkerStatus.RUNNING -> Color.Green
+                        WorkerStatus.COMPLETED -> Color.Cyan
+                        WorkerStatus.CRASHED -> Color.Red
+                        else -> Color.Gray
+                    }
+                ))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(worker.name, fontSize = 10.sp, color = Color.LightGray)
+                if (worker.restarts > 0) {
+                    Text(" (${worker.restarts})", fontSize = 9.sp, color = Color.Yellow)
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.weight(1f))
         
         ControlButton("Stop All", Icons.Default.Stop, Color.Red) { onCommand("stop") }
