@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ==============================================================================
-# AI COMMAND CENTER (acc) - UNIFIED CROSS-PLATFORM ORCHESTRATOR
+# AI COMMAND CENTER (acc) - UNIFIED UNIVERSAL ORCHESTRATOR
 # ==============================================================================
 
 import os
@@ -26,7 +26,9 @@ DATA_DIR = PROJECT_ROOT / "data"
 def log(msg): print(f"[\033[1;34macc\033[0m] {msg}")
 def error(msg): print(f"[\033[1;31merror\033[0m] {msg}", file=sys.stderr)
 
-def run_shell(cmd, cwd=PROJECT_ROOT, check=True, capture=False):
+def run_shell(cmd, cwd=PROJECT_ROOT, check=True, capture=False, sudo=False):
+    if sudo and platform.system() != "Windows":
+        cmd = f"sudo {cmd}"
     try:
         result = subprocess.run(cmd, shell=True, cwd=str(cwd), check=check, 
                                 capture_output=capture, text=True)
@@ -45,7 +47,7 @@ def ensure_system_deps():
         log(f"Missing tools: {missing}. Attempting auto-install...")
         if platform.system() == "Linux":
             if shutil.which("apt-get"):
-                run_shell(f"sudo apt-get update -qq && sudo apt-get install -y {' '.join(['docker.io' if m=='docker' else m for m in missing])}")
+                run_shell(f"apt-get update -qq && apt-get install -y {' '.join(['docker.io' if m=='docker' else m for m in missing])}", sudo=True)
         elif platform.system() == "Darwin":
             if shutil.which("brew"):
                 run_shell(f"brew install {' '.join([m for m in missing if m != 'docker'])}")
@@ -58,6 +60,30 @@ def ensure_system_deps():
         else:
             error(f"Auto-install not supported on {platform.system()}. Please install manually: {missing}")
             sys.exit(1)
+
+def tune_hardware():
+    if platform.system() == "Windows":
+        log("[SKIP] System-level hardware tuning is managed via Windows settings or WSL.")
+        return
+
+    log("Applying System-Level Optimizations...")
+    
+    # 1. CPU Governor
+    if shutil.which("cpupower"):
+        try: run_shell("cpupower frequency-set -g performance", sudo=True)
+        except: pass
+
+    # 2. GPU Persistence
+    if shutil.which("nvidia-smi"):
+        try: run_shell("nvidia-smi -pm 1", sudo=True)
+        except: pass
+
+    # 3. Kernel VM Tuning (Linux only)
+    if platform.system() == "Linux":
+        try:
+            run_shell('echo "vm.swappiness=1" | tee /etc/sysctl.d/99-llm-hw.conf', sudo=True)
+            run_shell('sysctl -p /etc/sysctl.d/99-llm-hw.conf', sudo=True)
+        except: pass
 
 def setup_env():
     ensure_system_deps()
@@ -78,19 +104,17 @@ def setup_env():
     fleet_json = CONFIG_DIR / "fleet.json"
     if not fleet_json.exists():
         log("Initializing default fleet...")
-        default_fleet = {"models": [{"name": "phi3", "repo": "microsoft/Phi-3-mini-4k-instruct-gguf", "filePattern": "*Q4_K_M.gguf", "tier": "FAST", "quant": "Q4_K_M", "isPrivate": False}]}
+        default_fleet = {"models": [{"provider": "ollama", "name": "phi3", "repo": "microsoft/Phi-3-mini-4k-instruct-gguf", "filePattern": "*Q4_K_M.gguf", "tier": "FAST", "quant": "Q4_K_M", "isPrivate": False}]}
         with open(fleet_json, "w") as f: json.dump(default_fleet, f, indent=4)
 
-    hwt_script = PROJECT_ROOT / "common" / "hwt.sh"
-    if hwt_script.exists() and platform.system() != "Windows":
-        run_shell(f"bash {hwt_script} tune")
+    tune_hardware()
 
 def smart_start():
     health_url = "http://localhost:8333/health"
     try:
         if requests.get(health_url, timeout=1).status_code == 200:
             log("Acc Cockpit is active.")
-            open_url("http://localhost:8333")
+            open_dashboard()
             return
     except: pass
 
@@ -116,24 +140,24 @@ def smart_start():
         try:
             if requests.get(health_url, timeout=1).status_code == 200:
                 log("[SUCCESS] Cockpit online.")
-                open_url("http://localhost:8333")
+                open_dashboard()
                 return
         except: pass
         time.sleep(2)
     error("Manager failed to start. Check docker logs.")
 
-def open_url(url):
+def open_dashboard():
     import webbrowser
-    webbrowser.open(url)
+    webbrowser.open("http://localhost:8333")
 
 def handle_dev_commands(args):
     if not (PROJECT_ROOT / ".git").exists():
         error("Dev commands only available in Creator/Source mode.")
         return
 
+    import re
     if args.dev == "test":
         current_tag = run_shell("git describe --tags --abbrev=0", capture=True) or "v0.0.0"
-        import re
         base_match = re.match(r'^(v\d+\.\d+\.\d+)', current_tag)
         base_version = base_match.group(1) if base_match else "v0.0.0"
         
@@ -151,7 +175,7 @@ def handle_dev_commands(args):
 
     elif args.dev == "release":
         current_tag = run_shell("git describe --tags --abbrev=0", capture=True) or "v0.0.0"
-        parts = list(map(int, (re.match(r'^v(\d+\.\d+\.\d+)', current_tag).group(1)).split('.')))
+        parts = list(map(int, (re.search(r'(\d+\.\d+\.\d+)', current_tag).group(1)).split('.')))
         next_version = f"v{parts[0]}.{parts[1] + 1}.0"
         
         log(f"Creating Stable Release: {next_version}")
@@ -166,10 +190,17 @@ def handle_dev_commands(args):
         run_shell(f'git commit -m "docs: release notes for {next_version}"')
         run_shell(f'git tag -a "{next_version}" -m "Stable Release {next_version}"')
         run_shell(f"git push origin {branch} --tags")
+    
+    elif args.dev == "push":
+        log("Syncing changes to GitHub...")
+        run_shell("git add .")
+        msg = input("[PROMPT] Commit message: ")
+        run_shell(f'git commit -m "{msg if msg else "dev: routine sync"}"')
+        run_shell("git push origin main")
 
 def main():
     parser = argparse.ArgumentParser(description="AI Command Center Orchestrator")
-    parser.add_argument("command", nargs="?", default="help", help="Command to run (setup, up, stop, uninstall, gui, dev)")
+    parser.add_argument("command", nargs="?", default="help", help="Command to run (setup, up, stop, uninstall, dev)")
     parser.add_argument("subcommand", nargs="?", help="Subcommand or argument")
     parser.add_argument("--force", action="store_true", help="Force action (for uninstall)")
     parser.add_argument("--dev", choices=["test", "release", "push", "benchmark"], help="Dev commands")
@@ -180,10 +211,11 @@ def main():
     elif args.command == "up":
         url = "http://localhost:8333/provisioning/up"
         if args.subcommand: url += f"?model={args.subcommand}"
-        requests.post(url)
+        try: requests.post(url)
+        except: error("Gateway not responding. Is Acc running?")
     elif args.command == "stop":
         log("Stopping infrastructure...")
-        run_shell("docker compose down -v")
+        if shutil.which("docker"): run_shell("docker compose down -v")
     elif args.command == "uninstall":
         if (PROJECT_ROOT / ".git").exists():
             error("Uninstall blocked: Creator directory detected.")
@@ -191,10 +223,8 @@ def main():
         if not args.force:
             confirm = input("[PROMPT] This will completely remove Acc. Are you sure? (y/N): ")
             if confirm.lower() != 'y': sys.exit(0)
-        run_shell("docker compose down -v")
+        if shutil.which("docker"): run_shell("docker compose down -v")
         shutil.rmtree(PROJECT_ROOT)
-        bin_link = Path.home() / ".local" / "bin" / "acc"
-        if bin_link.exists(): bin_link.unlink()
         log("Acc uninstalled.")
     elif args.command == "dev":
         handle_dev_commands(args)

@@ -58,11 +58,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            acc
             acc.py
-            acc.ps1
-            install.sh
-            install.ps1
             docker-compose.yml
             LICENSE
             RELEASE_NOTES.md

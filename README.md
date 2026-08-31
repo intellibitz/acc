@@ -41,23 +41,21 @@ acc is organized into a clean, professional architecture:
 
 ## 🚀 Quick Start (True Zero Effort)
 
-Acc is **Container-First**. Run the one-liner for your OS to install and launch your cockpit instantly:
+Acc is **Unified & Universal**. Run the installer for your OS to launch your cockpit instantly:
 
 ### 🐧 Linux & 🍎 macOS
 ```bash
-curl -sSL https://raw.githubusercontent.com/intellibitz/acc/main/install.sh | bash
+python3 -c "$(curl -fsSL https://raw.githubusercontent.com/intellibitz/acc/main/acc.py)" setup
+python3 -c "$(curl -fsSL https://raw.githubusercontent.com/intellibitz/acc/main/acc.py)"
 ```
 
 ### 🪟 Windows (PowerShell)
 ```powershell
-iwr -useb https://raw.githubusercontent.com/intellibitz/acc/main/install.ps1 | iex
+python -c "(iwr https://raw.githubusercontent.com/intellibitz/acc/main/acc.py).Content" setup
+python -c "(iwr https://raw.githubusercontent.com/intellibitz/acc/main/acc.py).Content"
 ```
 
-Once installed, simply run:
-```bash
-acc
-```
-This will launch everything via **Docker Compose**, keeping your system clean.
+Once installed, just run `python3 acc.py` to start.
 
 ---
 
@@ -76,12 +74,10 @@ The `acc` script acts as a smart dispatcher for your workstation:
 ### 🎮 User (The Pilot)
 | Command | Action |
 | :--- | :--- |
-| **`./acc`** | Launch the Visual Dashboard and start infrastructure. |
-| **`./acc update`** | One-click upgrade: syncs code, runs setup, and restarts. |
-| **`./acc chat`** | Launch an interactive session with any model. |
-| **`./acc stop`** | Gracefully shutdown all services and agents. |
-| **`./acc uninstall`** | Completely remove Acc and reclaim all disk space (Standalone only). |
-| **`./acc add`** | Add a new model/provider to your fleet (Cloud or Local). |
+| **`python3 acc.py`** | Launch the Visual Dashboard and start infrastructure. |
+| **`python3 acc.py stop`** | Gracefully shutdown all services and agents. |
+| **`python3 acc.py uninstall`** | Completely remove Acc and reclaim all disk space. |
+| **`python3 acc.py add`** | Add a new model/provider to your fleet. |
 
 ### 🔧 Maintenance (The Mechanic)
 | Command | Action |
