@@ -3,7 +3,15 @@
 # AI COMMAND CENTER (acc) - TRUE ZERO-EFFORT ORCHESTRATOR
 # ==============================================================================
 
-PROJECT_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# Robust Project Root Detection (Handles Symlinks)
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+    DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+PROJECT_ROOT="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+
 CORE_DIR="$PROJECT_ROOT/common"
 RUN_DIR="$PROJECT_ROOT/data/run"; mkdir -p "$RUN_DIR"
 VENV_DIR="$PROJECT_ROOT/.venv"
@@ -116,7 +124,7 @@ smart_start() {
 
     if command -v docker-compose &> /dev/null || docker compose version &> /dev/null; then
         log "Launching via Docker (Zero-Effort Integrity)..."
-        docker compose up -d
+        docker compose -f "$PROJECT_ROOT/docker-compose.yml" up -d
     else
         log "Docker not found. Falling back to local host execution..."
         if [ ! -f "$PROJECT_ROOT/requirements.txt" ]; then
@@ -208,7 +216,9 @@ case "$1" in
         fi
 
         log "Stopping infrastructure..."
-        [ -f "$PROJECT_ROOT/docker-compose.yml" ] && docker compose down -v 2>/dev/null
+        if [ -f "$PROJECT_ROOT/docker-compose.yml" ]; then
+             docker compose -f "$PROJECT_ROOT/docker-compose.yml" down -v 2>/dev/null
+        fi
         pkill -f "cc.thevar.acc" || true
 
         log "Reclaiming disk space..."
