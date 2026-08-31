@@ -29,6 +29,7 @@ Thumbs.db
 .initialized
 
 # Data & Blobs (Large files stored locally)
+.cache/
 downloads/
 optimizations/
 archives/
