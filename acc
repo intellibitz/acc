@@ -41,9 +41,13 @@ ensure_system_deps() {
 }
 
 ensure_python_env() {
+    if [ ! -f "$PROJECT_ROOT/requirements.txt" ]; then
+        log "[SKIP] requirements.txt not found. Skipping local Python env setup."
+        return
+    fi
     if [ ! -d "$VENV_DIR" ]; then
         log "Creating isolated Python environment (.venv)..."
-        python3 -m venv "$VENV_DIR" || { error "Failed to create venv. Ensure 'python3-venv' is installed."; exit 1; }
+        python3 -m venv "$VENV_DIR" || { log "Failed to create venv. Ensure 'python3-venv' is installed."; return; }
     fi
 
     source "$VENV_DIR/bin/activate"
@@ -60,10 +64,14 @@ setup_env() {
 
     if [ ! -f "$PROJECT_ROOT/config/keystore.p12" ]; then
         log "Generating secure local identity..."
-        keytool -genkeypair -alias acc -keyalg RSA -keysize 2048 -storetype PKCS12 \
-            -keystore "$PROJECT_ROOT/config/keystore.p12" -validity 365 \
-            -storepass password -keypass password \
-            -dname "CN=localhost, OU=acc, O=intellibitz, L=Unknown, ST=Unknown, C=Unknown" > /dev/null 2>&1
+        if command -v keytool &> /dev/null; then
+            keytool -genkeypair -alias acc -keyalg RSA -keysize 2048 -storetype PKCS12 \
+                -keystore "$PROJECT_ROOT/config/keystore.p12" -validity 365 \
+                -storepass password -keypass password \
+                -dname "CN=localhost, OU=acc, O=intellibitz, L=Unknown, ST=Unknown, C=Unknown" > /dev/null 2>&1
+        else
+            log "[SKIP] 'keytool' not found. Skipping keystore generation."
+        fi
     fi
 
     # Load .env if exists
@@ -76,7 +84,11 @@ setup_env() {
         echo '{"models": [{"name": "phi3", "repo": "microsoft/Phi-3-mini-4k-instruct-gguf", "filePattern": "*Q4_K_M.gguf", "tier": "FAST", "quant": "Q4_K_M", "isPrivate": false}]}' > "$PROJECT_ROOT/config/fleet.json"
     fi
 
-    $OSM sync --auto; $OSM tune
+    if [ -f "$PROJECT_ROOT/common/osm.sh" ]; then
+        $OSM sync --auto; $OSM tune
+    else
+        log "[SKIP] common/osm.sh not found. Skipping hardware tuning."
+    fi
 }
 
 cleanup_dash() {
@@ -97,11 +109,20 @@ smart_start() {
         return
     fi
 
+    if [ ! -f "$PROJECT_ROOT/docker-compose.yml" ]; then
+        log "Fetching deployment configuration..."
+        curl -sSL "https://raw.githubusercontent.com/intellibitz/acc/main/docker-compose.yml" -o "$PROJECT_ROOT/docker-compose.yml"
+    fi
+
     if command -v docker-compose &> /dev/null || docker compose version &> /dev/null; then
         log "Launching via Docker (Zero-Effort Integrity)..."
         docker compose up -d
     else
         log "Docker not found. Falling back to local host execution..."
+        if [ ! -f "$PROJECT_ROOT/requirements.txt" ]; then
+            log "[ERROR] Docker missing and requirements.txt not found. Cannot launch."
+            exit 1
+        fi
         ensure_system_deps
         ensure_python_env
         cleanup_dash
@@ -127,31 +148,34 @@ case "$1" in
     setup) setup_env ;;
     up) curl -skX POST https://localhost:8333/provisioning/up ;;
     dash) source "$VENV_DIR/bin/activate"; python3 "$PROJECT_ROOT/tooling/tui_dashboard.py" ;;
-    status) $OSM status ;;
-    sync) $OSM sync ;;
-    tune-hw) $OSM tune ;;
+    status) [ -f "$PROJECT_ROOT/common/osm.sh" ] && $OSM status || log "[SKIP] osm.sh not found." ;;
+    sync) [ -f "$PROJECT_ROOT/common/osm.sh" ] && $OSM sync || log "[SKIP] osm.sh not found." ;;
+    tune-hw) [ -f "$PROJECT_ROOT/common/osm.sh" ] && $OSM tune || log "[SKIP] osm.sh not found." ;;
     maint)
         case "$2" in
-            kill) ./gradlew --stop; pkill -f "cc.thevar.acc" ;;
-            prune) $PROVISIONER prune ;;
+            kill) [ -f "./gradlew" ] && ./gradlew --stop; pkill -f "cc.thevar.acc" ;;
+            prune) [ -f "$PROJECT_ROOT/common/provisioner.sh" ] && $PROVISIONER prune || log "[SKIP] provisioner.sh not found." ;;
             *) echo "Usage: ./acc maint [kill|prune]" ;;
         esac
         ;;
     gui)
         export NODE_OPTIONS="--no-deprecation"
-        source "$VENV_DIR/bin/activate"
+        [ -d "$VENV_DIR" ] && source "$VENV_DIR/bin/activate"
 
         # Check for pre-built JAR (Installed Mode)
         if [ -f "$PROJECT_ROOT/bin/acc-gateway.jar" ]; then
             log "Starting pre-built cockpit..."
             java -jar "$PROJECT_ROOT/bin/acc-gateway.jar" > "$PROJECT_ROOT/logs/gateway.log" 2>&1
-        else
+        elif [ -f "$PROJECT_ROOT/gradlew" ]; then
             # Source Mode: Start the build in background if missing
             if [ ! -d "frontend/web/build/dist/wasmJs/productionExecutable" ]; then
                 log "Triggering background frontend build..."
                 nohup ./gradlew :frontend:web:wasmJsBrowserDistribution --quiet > logs/build.log 2>&1 &
             fi
             ./gradlew :gateway:run --no-daemon > "$PROJECT_ROOT/logs/gateway.log" 2>&1
+        else
+            error "No executable found. Please use Docker or run in Source Mode with gradlew."
+            exit 1
         fi
         ;;
     stop)

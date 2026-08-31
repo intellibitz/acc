@@ -23,15 +23,14 @@ ln -sf "$INSTALL_DIR/acc" "$BIN_DIR/acc"
 
 log "Initializing environment..."
 cd "$INSTALL_DIR"
-./acc setup
+./acc setup --minimal # Optional flag or just rely on the new resilience
 
-log "Fetching pre-built cockpit..."
-# In a real release, this would download the Shadow JAR from GitHub Releases
-# For now, we'll guide the user to the local build if they have the source
-# but the vision is: curl -L https://github.com/$REPO/releases/latest/download/acc-gateway.jar -o bin/gateway.jar
+log "Fetching pre-built assets..."
+curl -sSL "https://raw.githubusercontent.com/$REPO/main/docker-compose.yml" -o "$INSTALL_DIR/docker-compose.yml"
 
 log "\033[1;32mSUCCESS!\033[0m AI Command Center is installed."
 log "Type 'acc' to start your cockpit."
+log "Note: Acc prioritizes Docker for a Zero-Footprint experience."
 
 # Check if BIN_DIR is in PATH
 if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
