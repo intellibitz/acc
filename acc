@@ -84,10 +84,10 @@ setup_env() {
         echo '{"models": [{"name": "phi3", "repo": "microsoft/Phi-3-mini-4k-instruct-gguf", "filePattern": "*Q4_K_M.gguf", "tier": "FAST", "quant": "Q4_K_M", "isPrivate": false}]}' > "$PROJECT_ROOT/config/fleet.json"
     fi
 
-    if [ -f "$PROJECT_ROOT/common/osm.sh" ]; then
+    if [ -f "$PROJECT_ROOT/common/hwt.sh" ]; then
         $OSM sync --auto; $OSM tune
     else
-        log "[SKIP] common/osm.sh not found. Skipping hardware tuning."
+        log "[SKIP] common/hwt.sh not found. Skipping hardware tuning."
     fi
 }
 
@@ -154,9 +154,9 @@ case "$1" in
         fi
         ;;
     dash) source "$VENV_DIR/bin/activate"; python3 "$PROJECT_ROOT/tooling/tui_dashboard.py" ;;
-    status) [ -f "$PROJECT_ROOT/common/osm.sh" ] && $OSM status || log "[SKIP] osm.sh not found." ;;
-    sync) [ -f "$PROJECT_ROOT/common/osm.sh" ] && $OSM sync || log "[SKIP] osm.sh not found." ;;
-    tune-hw) [ -f "$PROJECT_ROOT/common/osm.sh" ] && $OSM tune || log "[SKIP] osm.sh not found." ;;
+    status) [ -f "$PROJECT_ROOT/common/hwt.sh" ] && $OSM status || log "[SKIP] hwt.sh not found." ;;
+    sync) [ -f "$PROJECT_ROOT/common/hwt.sh" ] && $OSM sync || log "[SKIP] hwt.sh not found." ;;
+    tune-hw) [ -f "$PROJECT_ROOT/common/hwt.sh" ] && $OSM tune || log "[SKIP] hwt.sh not found." ;;
     maint)
         case "$2" in
             kill) [ -f "./gradlew" ] && ./gradlew --stop; pkill -f "cc.thevar.acc" ;;
@@ -186,7 +186,7 @@ case "$1" in
         ;;
     stop)
         cleanup_dash
-        [ -f "$PROJECT_ROOT/common/osm.sh" ] && $OSM stop
+        [ -f "$PROJECT_ROOT/common/hwt.sh" ] && $OSM stop
         pkill -f "cc.thevar.acc"
         log "System stopped."
         ;;
