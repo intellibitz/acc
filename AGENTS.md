@@ -4,12 +4,12 @@ Welcome to the Acc cockpit. Here is the current architectural status as of late 
 
 ## 🗝️ Core Security Rule
 **DO NOT allow arbitrary command execution via WebSockets.**
-The `/ws/console` endpoint is white-listed in `Application.kt`. If you add new functionality that requires terminal access, add the command to the `allowedCommands` set and ensure it is sanitized.
+Command execution is handled by `cc.thevar.acc.service.CommandHandler`, which enforces strict whitelisting and routes commands to either internal Kotlin services or sanitized shell executions.
 
 ## 🏗️ The Bridge Pattern
-Hardware stats are fetched via `brain/system_bridge.py`.
-- **The Kotlin side** deserializes this into `SystemState` using `kotlinx.serialization`.
-- **The Python side** must output a raw JSON object matching the `SystemStats` and `FleetStatus` fields.
+Hardware stats are fetched via a persistent `brain/system_bridge.py` stream.
+- **The Kotlin side** (via `SupervisorService`) consumes this stream and broadcasts to UI/System sessions.
+- **The Python side** runs a persistent loop emitting JSON every 2 seconds to avoid spawn overhead.
 - **Avoid Regex**: We have removed regex patching. Always use structured JSON merging.
 
 ## 📱 UI Modularization
@@ -20,8 +20,9 @@ The UI is split into:
 - `cc.thevar.acc.ui.Theme`: Material 3 design tokens.
 
 ## 🧪 Ongoing Missions
-- [ ] Implement unit tests for the `CommandHandler` logic in `gateway`.
-- [ ] Move `ProvisioningService` into a more robust state-machine model.
-- [ ] Implement real-time GPU memory tracking using the `nvidia-smi` bridge more efficiently.
+- [x] Implement unit tests for the `CommandHandler` logic in `gateway`.
+- [x] Move `ProvisioningService` into a more robust state-machine model in Kotlin.
+- [x] Implement real-time GPU memory tracking using the `nvidia-smi` bridge more efficiently via persistent stream.
+- [ ] Implement integrated E2E journey tests for the Provisioning flow.
 
 See [docs/testing.md](docs/testing.md) for verification commands.

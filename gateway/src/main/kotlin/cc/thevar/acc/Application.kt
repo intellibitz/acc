@@ -1,9 +1,7 @@
 package cc.thevar.acc
 
 import cc.thevar.acc.protocol.*
-import cc.thevar.acc.service.FleetManager
-import cc.thevar.acc.service.ProvisioningService
-import cc.thevar.acc.service.SupervisorService
+import cc.thevar.acc.service.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.*
 import io.ktor.serialization.kotlinx.json.*
@@ -17,6 +15,7 @@ import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.*
 import kotlinx.serialization.encodeToString
 import java.io.File
@@ -43,6 +42,7 @@ val projectRoot = findProjectRoot()
 val fleetManager = FleetManager(File(projectRoot, "config"))
 val provisioningService = ProvisioningService(projectRoot, fleetManager)
 val supervisorService = SupervisorService(projectRoot)
+val commandHandler = CommandHandler(projectRoot, provisioningService)
 
 val uiSessions = Collections.newSetFromMap(ConcurrentHashMap<DefaultWebSocketServerSession, Boolean>())
 val systemSessions = Collections.newSetFromMap(ConcurrentHashMap<DefaultWebSocketServerSession, Boolean>())
@@ -58,19 +58,14 @@ fun main() {
     val httpsPort = 8334
     
     val server = embeddedServer(Netty, configure = {
-        // Always add HTTP connector
         connector {
             port = httpPort
             host = "0.0.0.0"
         }
 
-        // Add HTTPS connector if keystore exists
         if (keyStoreFile.exists()) {
             val keyStorePassword = System.getenv("ACC_KEYSTORE_PASSWORD")?.toCharArray() 
-                ?: "password".toCharArray() // Fallback with warning
-            if (System.getenv("ACC_KEYSTORE_PASSWORD") == null) {
-                println("[WARN] ACC_KEYSTORE_PASSWORD not set. Using default.")
-            }
+                ?: "password".toCharArray()
             val keyStore = KeyStore.getInstance("PKCS12")
             keyStoreFile.inputStream().use { keyStore.load(it, keyStorePassword) }
 
@@ -92,12 +87,11 @@ fun main() {
 }
 
 fun Application.module() {
-    // Check for first-run bootstrap
     val initSentinel = File(projectRoot, "data/.initialized")
     if (!initSentinel.exists()) {
         launch(Dispatchers.IO) {
             try {
-                systemStatusMsg = "Bootstrapping environment (Health Audit)..."
+                systemStatusMsg = "Bootstrapping environment..."
                 val process = ProcessBuilder("./acc", "setup")
                     .directory(projectRoot)
                     .redirectErrorStream(true)
@@ -108,7 +102,7 @@ fun Application.module() {
                 }
                 process.waitFor()
                 initSentinel.createNewFile()
-                systemStatusMsg = "Bootstrap complete. Refreshing..."
+                systemStatusMsg = "Bootstrap complete."
                 delay(1000)
                 ProcessBuilder("./acc", "refresh").directory(projectRoot).start()
             } catch (e: Exception) {
@@ -130,39 +124,32 @@ fun Application.module() {
         json()
     }
 
-    // System metrics polling
+    // System metrics streaming from Supervisor (System Bridge)
     launch(Dispatchers.IO) {
-        while (isActive) {
-            val sessionsToUpdate = systemSessions + uiSessions
-            if (sessionsToUpdate.isNotEmpty()) {
-                try {
-                    val process = ProcessBuilder("python3", "brain/system_bridge.py")
-                        .directory(projectRoot)
-                        .start()
-                    val output = process.inputStream.bufferedReader().readText()
-                    if (output.isNotEmpty()) {
-                        val bridgeData = Json.parseToJsonElement(output).jsonObject
-                        
-                        val fullState = SystemState(
-                            stats = Json.decodeFromJsonElement<SystemStats>(bridgeData["stats"]!!),
-                            fleet = Json.decodeFromJsonElement<List<ModelStatus>>(bridgeData["fleet"]!!),
-                            partialDownloads = Json.decodeFromJsonElement<List<String>>(bridgeData["partialDownloads"]!!),
-                            proxyOnline = Json.decodeFromJsonElement<Boolean>(bridgeData["proxyOnline"]!!),
-                            workers = supervisorService.workerStates.value,
-                            provisioning = provisioningService.updates.value.values.toList(),
-                            statusMsg = systemStatusMsg
-                        )
-                        
-                        val jsonFrame = Frame.Text(Json.encodeToString(fullState))
-                        sessionsToUpdate.forEach { session ->
-                            session.launch { try { session.send(jsonFrame) } catch (e: Exception) {} }
-                        }
+        supervisorService.getWorkerOutput("SYSTEM_BRIDGE").collect { output ->
+            try {
+                if (output.startsWith("{") && output.endsWith("}")) {
+                    val bridgeData = Json.parseToJsonElement(output).jsonObject
+                    
+                    val fullState = SystemState(
+                        stats = Json.decodeFromJsonElement<SystemStats>(bridgeData["stats"]!!),
+                        fleet = Json.decodeFromJsonElement<List<ModelStatus>>(bridgeData["fleet"]!!),
+                        partialDownloads = Json.decodeFromJsonElement<List<String>>(bridgeData["partialDownloads"]!!),
+                        proxyOnline = Json.decodeFromJsonElement<Boolean>(bridgeData["proxyOnline"]!!),
+                        workers = supervisorService.workerStates.value,
+                        provisioning = provisioningService.updates.value.values.toList(),
+                        statusMsg = systemStatusMsg
+                    )
+                    
+                    val jsonFrame = Frame.Text(Json.encodeToString(fullState))
+                    val sessions = systemSessions + uiSessions
+                    sessions.forEach { session ->
+                        session.launch { try { session.send(jsonFrame) } catch (e: Exception) {} }
                     }
-                } catch (e: Exception) {
-                    println("System poll error: ${e.message}")
                 }
+            } catch (e: Exception) {
+                // Ignore parsing errors for partial lines
             }
-            delay(2000)
         }
     }
 
@@ -187,12 +174,11 @@ fun Application.module() {
     }
 
     routing {
-        // Essential APIs
         get("/health") {
             val states = supervisorService.workerStates.value
-            val isHealthy = states.all { it.status == WorkerStatus.RUNNING || it.status == WorkerStatus.COMPLETED }
+            val isHealthy = states.all { it.status == WorkerStatus.RUNNING || it.status == WorkerStatus.COMPLETED || it.name == "FRONTEND_BUILDER"}
             if (isHealthy) {
-                call.respondText("Acc Gateway is Online. All workers healthy.")
+                call.respondText("Acc Gateway is Online.")
             } else {
                 call.respond(HttpStatusCode.ServiceUnavailable, states)
             }
@@ -211,35 +197,17 @@ fun Application.module() {
             call.respondText("Update sequence initiated.")
         }
 
-        // WebSockets
         webSocket("/ws/ui") { uiSessions.add(this); try { for (frame in incoming) { } } finally { uiSessions.remove(this) } }
         webSocket("/ws/system") { systemSessions.add(this); try { for (frame in incoming) { } } finally { systemSessions.remove(this) } }
         
         webSocket("/ws/console") {
-            val allowedCommands = setOf("up", "tune-hw", "sync", "auto-scale", "benchmark", "prune", "stop", "update", "refresh", "setup")
             try {
                 for (frame in incoming) {
                     if (frame is Frame.Text) {
                         val commandLine = frame.readText().trim()
-                        val baseCommand = commandLine.split(" ").firstOrNull()
-                        
-                        if (baseCommand !in allowedCommands) {
-                            send(Frame.Text(Json.encodeToString(ConsoleLine("Error: Command '$baseCommand' is not allowed.", "ERROR"))))
-                            continue
+                        commandHandler.handleCommand(commandLine).collect { line: ConsoleLine ->
+                            send(Frame.Text(Json.encodeToString<ConsoleLine>(line)))
                         }
-
-                        send(Frame.Text(Json.encodeToString(ConsoleLine("$ acc $commandLine", "COMMAND"))))
-                        
-                        val process = ProcessBuilder("./acc", *commandLine.split(" ").toTypedArray())
-                            .directory(projectRoot)
-                            .redirectErrorStream(true)
-                            .start()
-                        
-                        process.inputStream.bufferedReader().useLines { lines ->
-                            lines.forEach { line -> launch { send(Frame.Text(Json.encodeToString(ConsoleLine(line, "INFO")))) } }
-                        }
-                        process.waitFor()
-                        send(Frame.Text(Json.encodeToString(ConsoleLine("Task Finished", "SUCCESS"))))
                     }
                 }
             } catch (e: Exception) {
@@ -268,10 +236,8 @@ fun Application.module() {
             } finally { }
         }
 
-        // STATIC CONTENT SERVING (MOVED AND CONFIGURED)
         val staticDir = File(projectRoot, "frontend/web/build/dist/wasmJs/productionExecutable")
         
-        // Manual root handler with Recovery/Bootstrap UI
         get("/") {
             val indexFile = File(staticDir, "index.html")
             if (indexFile.exists()) {
@@ -296,15 +262,9 @@ fun Application.module() {
                     <body>
                         <div class="loader"></div>
                         <div>AI Command Center is initializing...</div>
-                        <div class="status" style="color: #03DAC6; margin-top: 10px;">
-                            ${systemStatusMsg}
-                        </div>
+                        <div class="status" style="color: #03DAC6; margin-top: 10px;">${systemStatusMsg}</div>
                         <div style="margin-top: 20px; color: ${if (builder?.status == WorkerStatus.CRASHED) "red" else "#BB86FC"}">
                             Frontend Build: ${builder?.status ?: "WAITING"}
-                        </div>
-                        <div style="margin-top: 10px; color: gray; font-size: 0.9em; max-width: 80%; text-align: center;">
-                            ${builder?.lastMsg ?: ""}
-                            ${if (builder?.status == WorkerStatus.CRASHED) "<br><br><button onclick=\"location.reload()\" style=\"background: #BB86FC; border: none; padding: 10px 20px; border-radius: 4px; color: black; font-weight: bold; cursor: pointer;\">Retry Build</button>" else ""}
                         </div>
                         <div style="margin-top: 30px; color: gray; font-size: 0.7em;">(Auto-refreshing every 5s)</div>
                     </body>
@@ -313,16 +273,13 @@ fun Application.module() {
                 
                 call.respondText(bootstrapHtml, ContentType.Text.Html)
                 
-                // Trigger builder if not started
                 if (builder == null || builder.status == WorkerStatus.STOPPED) {
                     supervisorService.startWorker("FRONTEND_BUILDER")
                 }
             }
         }
 
-        // Serve everything else
         staticFiles("/", staticDir) {
-            // Ensure WASM MIME type is set
             contentType { file ->
                 when (file.extension) {
                     "wasm" -> ContentType.Application.Wasm

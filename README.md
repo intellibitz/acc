@@ -28,9 +28,9 @@ acc is designed for the developer who wants to *use* AI, not fight with dependen
 
 ## 🏗️ Project Structure (Standard Format)
 acc is organized into a clean, professional architecture:
-- **`gateway/`**: The **Manager** (Control Plane). A high-performance Ktor hub that supervises all workers, handles provisioning, and serves the UI. Now features a hardened command API and structured hardware-stats bridge.
+- **`gateway/`**: The **Manager** (Control Plane). A high-performance Ktor hub that supervises all workers, handles provisioning (Kotlin-native), and serves the UI. Features a hardened `CommandHandler` and a stream-based hardware-stats consumer.
 - **`frontend/`**: The **Deck** (UI). A Compose Multiplatform app providing real-time observability. Modularized into discrete components (Sidebar, Console, Dashboard) with full **Edge-to-Edge** support.
-- **`brain/`**: The **Intelligence** layer. Managed Python workers for agents and system metrics, communicating via type-safe JSON protocols.
+- **`brain/`**: The **Intelligence** layer. Managed Python workers for agents and a persistent system metrics bridge, communicating via type-safe JSON protocols.
 - **`common/`**: The **Registry**. Shared type-safe protocols and models ensuring backend-to-frontend integrity, verified by automated JVM tests.
 - **`tooling/`**: The **Workshop**. Low-level scripts for project maintenance and benchmarking.
 
@@ -54,7 +54,8 @@ When you run `acc` for the first time:
 1.  **Instant Visuals**: The dashboard launches immediately in your browser.
 2.  **Visual Bootstrapping**: acc performs a full dependency audit and hardware tuning while streaming status updates directly to your screen.
 3.  **Elite Provisioning**: Models are downloaded and optimized using hardware-aware logic within the Kotlin Gateway.
-4.  **Unified Control**: Control everything—provision models, tune hardware, and watch agent thought streams—from one place.
+4.  **Persistent Monitoring**: High-efficiency hardware tracking via a persistent JSON stream bridge.
+5.  **Unified Control**: Control everything—provision models, tune hardware, and watch agent thought streams—directly from the dashboard.
 
 ## 🛠️ Orchestrator Commands
 The `acc` script acts as a smart dispatcher for your workstation:

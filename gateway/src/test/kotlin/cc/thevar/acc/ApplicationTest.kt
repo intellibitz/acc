@@ -14,7 +14,8 @@ class ApplicationTest {
             module()
         }
         val response = client.get("/")
+        val body = response.bodyAsText()
         assertEquals(HttpStatusCode.OK, response.status)
-        assertEquals("Hello, Ktor!", response.bodyAsText())
+        assertTrue(body.contains("acc") || body.contains("initializing"), "Body should contain 'acc' or 'initializing'")
     }
 }

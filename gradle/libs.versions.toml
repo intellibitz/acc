@@ -17,6 +17,7 @@ kotlinx-serialization = "1.8.0"
 kotlinx-coroutines = "1.11.0"
 ktor = "3.0.0"
 logback = "1.6.3"
+mockk = "1.13.12"
 material3 = "1.7.3"
 
 [libraries]
@@ -46,9 +47,11 @@ ktor-serverContentNegotiation = { module = "io.ktor:ktor-server-content-negotiat
 ktor-serverTls = { module = "io.ktor:ktor-server-tls", version.ref = "ktor" }
 ktor-serializationKotlinxJson = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
 ktor-clientCore = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
+ktor-clientCio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
 ktor-clientWebsockets = { module = "io.ktor:ktor-client-websockets", version.ref = "ktor" }
 ktor-clientContentNegotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
 ktor-serverTestHost = { module = "io.ktor:ktor-server-test-host", version.ref = "ktor" }
+mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 wrappers-browser = { module = "org.jetbrains.kotlin-wrappers:kotlin-browser", version.ref = "kotlin-wrappers" }
 

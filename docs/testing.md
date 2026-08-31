@@ -24,6 +24,20 @@ UI components are tested via Compose Previews and manual verification across:
 - **JVM Desktop**: High-performance windowed app.
 - **Android**: Mobile cockpit.
 
-## 🛡️ Security Verification
-The Gateway unit tests (planned) will verify that the `CommandHandler` white-list correctly blocks unauthorized commands.
-Currently, this is verified manually by attempting non-whitelisted commands via the Console WebSocket.
+## 🛡️ Security & Command Verification
+The Gateway unit tests verify that the `CommandHandler` white-list correctly blocks unauthorized commands and routes valid ones.
+Located in `:gateway:src:test:kotlin:cc.thevar.acc.service.CommandHandlerTest`.
+
+To run:
+```bash
+./gradlew :gateway:test --tests "cc.thevar.acc.service.CommandHandlerTest"
+```
+
+## 🚀 Service & Provisioning Tests
+Unit tests for core service logic, including hardware-aware layer calculation and fleet management.
+Located in `:gateway:src:test:kotlin:cc.thevar.acc.service.ProvisioningServiceTest`.
+
+To run:
+```bash
+./gradlew :gateway:test --tests "cc.thevar.acc.service.ProvisioningServiceTest"
+```

@@ -4,13 +4,15 @@ import json
 import os
 import requests
 import re
+import time
+import sys
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def get_gpu_stats():
     try:
-        cmd = "nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw --format=csv,noheader,nounits"
-        output = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode().strip()
+        cmd = ["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw", "--format=csv,noheader,nounits"]
+        output = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode().strip()
         parts = output.split(", ")
         return {
             "utilization": float(parts[0]), "memoryUsed": float(parts[1]), "memoryTotal": float(parts[2]),
@@ -22,8 +24,10 @@ def get_fleet_disk_usage():
     try:
         ollama_dir = os.path.expanduser("~/.ollama/models")
         if not os.path.exists(ollama_dir): return "N/A"
-        cmd = "du -sh {} | awk '{{print $1}}'".format(ollama_dir)
-        return subprocess.check_output(cmd, shell=True).decode().strip()
+        # Using du without shell=True where possible
+        process = subprocess.Popen(["du", "-sh", ollama_dir], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        out, _ = process.communicate()
+        return out.decode().split()[0]
     except: return "ERR"
 
 def get_ollama_status():
@@ -38,36 +42,48 @@ def get_ollama_status():
     except: return {"online": False}
 
 def get_fleet_config():
-    fleet_path = os.path.join(PROJECT_ROOT, "config/fleet.conf")
-    private_path = os.path.join(PROJECT_ROOT, "config/private_fleet.conf")
+    fleet_json_path = os.path.join(PROJECT_ROOT, "config/fleet.json")
     managed = []
     private = []
     
-    def parse_conf(path, target_list):
-        if os.path.exists(path):
-            try:
-                with open(path, 'r') as f:
-                    content = f.read()
-                    matches = re.findall(r'"([^"|]+\|[^"|]+)\|', content)
-                    for m in matches: target_list.append(m.split('|')[1])
-            except: pass
-
-    parse_conf(fleet_path, managed)
-    parse_conf(private_path, private)
+    if os.path.exists(fleet_json_path):
+        try:
+            with open(fleet_json_path, 'r') as f:
+                data = json.load(f)
+                for m in data.get("models", []):
+                    if m.get("isPrivate"): private.append(m["name"])
+                    else: managed.append(m["name"])
+        except: pass
+    else:
+        # Fallback to legacy
+        fleet_path = os.path.join(PROJECT_ROOT, "config/fleet.conf")
+        private_path = os.path.join(PROJECT_ROOT, "config/private_fleet.conf")
+        
+        def parse_conf(path, target_list):
+            if os.path.exists(path):
+                try:
+                    with open(path, 'r') as f:
+                        content = f.read()
+                        matches = re.findall(r'"([^"|]+\|[^"|]+)\|', content)
+                        for m in matches: target_list.append(m.split('|')[1])
+                except: pass
+        parse_conf(fleet_path, managed)
+        parse_conf(private_path, private)
+        
     return managed, private
 
 def get_partial_downloads():
     partials = []
     dl_dir = os.path.join(PROJECT_ROOT, "downloads")
     if os.path.exists(dl_dir):
-        for d in os.listdir(dl_dir):
-            path = os.path.join(dl_dir, d)
-            if os.path.isdir(path):
-                try:
+        try:
+            for d in os.listdir(dl_dir):
+                path = os.path.join(dl_dir, d)
+                if os.path.isdir(path):
                     files = os.listdir(path)
                     if any(f.endswith(".part") or ".part" in f for f in files):
                         partials.append(d)
-                except: pass
+        except: pass
     return partials
 
 def get_system_state():
@@ -115,4 +131,15 @@ def get_system_state():
     }
 
 if __name__ == "__main__":
-    print(json.dumps(get_system_state()))
+    # Persistence mode: loop and emit JSON every 2 seconds
+    while True:
+        try:
+            state = get_system_state()
+            print(json.dumps(state))
+            sys.stdout.flush()
+        except Exception as e:
+            # Emit error in a way that doesn't break the JSON consumer if possible, 
+            # but here we just print to stderr
+            sys.stderr.write(f"Bridge Error: {str(e)}\n")
+            sys.stderr.flush()
+        time.sleep(2)

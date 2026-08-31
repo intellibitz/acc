@@ -3,8 +3,10 @@ package cc.thevar.acc.service
 import cc.thevar.acc.protocol.WorkerState
 import cc.thevar.acc.protocol.WorkerStatus
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flow
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
@@ -20,12 +22,28 @@ class SupervisorService(private val projectRoot: File) {
         registerWorker("SYSTEM_BRIDGE", listOf("python3", "brain/system_bridge.py"), restartPolicy = true)
         registerWorker("FRONTEND_BUILDER", listOf("./gradlew", ":frontend:web:wasmJsBrowserDistribution", "--quiet"), restartPolicy = false)
         
+        // Start core workers automatically
+        startWorker("SYSTEM_BRIDGE")
+
         // Start monitoring loop
         scope.launch {
             while (isActive) {
                 checkWorkers()
                 delay(2000)
             }
+        }
+    }
+
+    fun getWorkerOutput(name: String): Flow<String> = flow {
+        val worker = workers[name] ?: return@flow
+        var lastEmitted = ""
+        while (currentCoroutineContext().isActive) {
+            val msg = worker.lastMsg
+            if (msg.isNotEmpty() && msg != lastEmitted) {
+                emit(msg)
+                lastEmitted = msg
+            }
+            delay(100)
         }
     }
 
@@ -60,10 +78,10 @@ class SupervisorService(private val projectRoot: File) {
         val restartPolicy: Boolean
     ) {
         private var process: Process? = null
-        private var status = WorkerStatus.STOPPED
-        private var restarts = 0
-        private var lastMsg = ""
-        private var lastError: String? = null
+        var status = WorkerStatus.STOPPED
+        var restarts = 0
+        var lastMsg = ""
+        var lastError: String? = null
         private var logJob: Job? = null
 
         fun start() {
