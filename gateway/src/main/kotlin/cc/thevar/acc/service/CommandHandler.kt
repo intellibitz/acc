@@ -13,7 +13,7 @@ class CommandHandler(
     private val projectRoot: File,
     private val provisioningService: ProvisioningService
 ) {
-    private val allowedExternalCommands = setOf("up", "tune-hw", "sync", "auto-scale", "benchmark", "prune", "stop", "update", "refresh", "setup")
+    private val allowedExternalCommands = setOf("up", "sync", "auto-scale", "benchmark", "prune")
 
     fun handleCommand(commandLine: String): Flow<ConsoleLine> = flow {
         val parts = commandLine.trim().split(" ")

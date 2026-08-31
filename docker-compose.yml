@@ -9,6 +9,8 @@ services:
     volumes:
       - ./config:/app/config
       - ./logs:/app/logs
+      - ./registry:/app/registry
+      - ./.cache:/app/.cache
       - /var/run/docker.sock:/var/run/docker.sock
 
   ollama:
@@ -17,8 +19,12 @@ services:
     profiles: ["engine"]
     ports:
       - "11434:11434"
+    environment:
+      - OLLAMA_MODELS=/root/.ollama
     volumes:
       - ollama_data:/root/.ollama
+      - ./registry:/app/registry
+      - ./.cache:/app/.cache
     deploy:
       resources:
         reservations:

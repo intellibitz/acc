@@ -105,21 +105,25 @@ fun Application.module() {
     if (!initSentinel.exists()) {
         launch(Dispatchers.IO) {
             try {
-                systemStatusMsg = "Self-bootstrapping cockpit..."
-                // Inside Docker, we use python3 acc.py setup
-                val process = ProcessBuilder("python3", "acc.py", "setup")
-                    .directory(projectRoot)
-                    .redirectErrorStream(true)
-                    .start()
-
-                process.inputStream.bufferedReader().useLines { lines ->
-                    lines.forEach { line -> systemStatusMsg = line }
+                systemStatusMsg = "Initializing fleet and registry..."
+                // Inside Docker, we only need to ensure directories and default config
+                val fleetJson = File(projectRoot, "config/fleet.json")
+                if (!fleetJson.exists()) {
+                    File(projectRoot, "config").mkdirs()
+                    val defaultFleet = """{"models": [{"provider": "ollama", "name": "phi3", "repo": "microsoft/Phi-3-mini-4k-instruct-gguf", "filePattern": "*Q4_K_M.gguf", "tier": "FAST", "quant": "Q4_K_M", "isPrivate": false}]}"""
+                    fleetJson.writeText(defaultFleet)
                 }
-                process.waitFor()
+                
+                File(projectRoot, "data/backups").mkdirs()
+                File(projectRoot, "logs").mkdirs()
+                File(projectRoot, ".cache").mkdirs()
+                File(projectRoot, "registry").mkdirs()
+
+                initSentinel.parentFile.mkdirs()
                 initSentinel.createNewFile()
                 systemStatusMsg = "Acc Ready."
             } catch (e: Exception) {
-                systemStatusMsg = "Bootstrap Error: ${e.message}"
+                systemStatusMsg = "Initialization Error: ${e.message}"
             }
         }
     } else {

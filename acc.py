@@ -170,6 +170,18 @@ def handle_dev_commands(args):
         run_shell(f'git tag -a "{next_version}" -m "Stable Release {next_version}"')
         run_shell(f"git push origin {branch} --tags")
 
+    elif args.dev == "push":
+        log("Auto-staging and pushing changes...")
+        run_shell("git add .")
+        # Check if there are changes to commit
+        status = run_shell("git status --porcelain", capture=True)
+        if status:
+            run_shell('git commit -m "feat: architectural refactor and project reorganization"')
+            run_shell("git push")
+            log("[SUCCESS] Changes pushed to GitHub.")
+        else:
+            log("[INFO] No changes to push.")
+
 def main():
     parser = argparse.ArgumentParser(description="AI Command Center Orchestrator")
     parser.add_argument("command", nargs="?", default="help", help="Command to run (setup, up, stop, uninstall, dev, optimize)")

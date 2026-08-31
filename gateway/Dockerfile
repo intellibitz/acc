@@ -35,7 +35,8 @@ COPY docker-compose.yml .
 COPY brain/ brain/
 COPY config/ config/
 COPY requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt huggingface-hub
+RUN pip3 install --no-cache-dir -r requirements.txt huggingface-hub && \
+    ln -s /usr/local/bin/huggingface-cli /usr/local/bin/hf
 
 # Environment Setup
 ENV PROJECT_ROOT=/app

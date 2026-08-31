@@ -6,6 +6,7 @@ import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
+import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,7 +19,8 @@ import java.time.format.DateTimeFormatter
 
 class ProvisioningService(
     private val projectRoot: File,
-    private val fleetManager: FleetManager
+    private val fleetManager: FleetManager,
+    private val ollamaHost: String = System.getenv("OLLAMA_HOST") ?: "http://localhost:11434"
 ) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val _updates = MutableStateFlow<Map<String, ProvisioningUpdate>>(emptyMap())
@@ -64,10 +66,18 @@ class ProvisioningService(
                     ""
                 }
 
-                val ollamaListProcess = ProcessBuilder("ollama", "list")
-                    .redirectErrorStream(true)
-                    .start()
-                val isInstalled = ollamaListProcess.inputStream.bufferedReader().readLines().any { it.contains(model.name) }
+                val isInstalled = try {
+                    val response: HttpResponse = client.get("$ollamaHost/api/tags")
+                    if (response.status.value == 200) {
+                        val body = response.bodyAsText()
+                        val jsonElement = json.parseToJsonElement(body).jsonObject
+                        val models = jsonElement["models"]?.jsonArray ?: JsonArray(emptyList())
+                        models.any { it.jsonObject["name"]?.jsonPrimitive?.content?.startsWith(model.name) ?: false }
+                    } else false
+                } catch (e: Exception) {
+                    println("Failed to check Ollama status for ${model.name}: ${e.message}")
+                    false
+                }
 
                 if (remoteSha != localSha || !isInstalled) {
                     updateStatus(model.name, ProvisioningStage.DOWNLOADING, 0.1f, message = "Downloading model...")
@@ -75,7 +85,7 @@ class ProvisioningService(
                     val dlDir = File(projectRoot, ".cache/${model.name}").apply { mkdirs() }
                     
                     val process = ProcessBuilder(
-                        "hf", "download", model.repo, 
+                        "huggingface-cli", "download", model.repo, 
                         "--include", model.filePattern,
                         "--local-dir", dlDir.absolutePath,
                         "--max-workers", "8"
@@ -134,14 +144,17 @@ class ProvisioningService(
     private suspend fun registerInOllama(model: ModelManifest, optDir: File, dlDir: File) {
         val ggufFile = dlDir.walkTopDown().find { it.extension == "gguf" } ?: throw Exception("GGUF not found")
         
+        // Map path for the Ollama container (using the shared volume path)
+        val ollamaGgufPath = "/app/.cache/${model.name}/${ggufFile.name}"
+        
         val threads = Runtime.getRuntime().availableProcessors().let { if (it > 4) it - 4 else it }
         val gpuLayers = calculateGpuLayers(model.name)
         
         val paramFile = File(optDir, "user_params")
         val userParams = if (paramFile.exists()) paramFile.readText() else "PARAMETER temperature 0.7\nPARAMETER top_p 0.9"
         
-        val modelfile = """
-            FROM ${ggufFile.absolutePath}
+        val modelfileContent = """
+            FROM $ollamaGgufPath
             PARAMETER num_gpu $gpuLayers
             PARAMETER num_thread $threads
             PARAMETER num_ctx 32768
@@ -149,23 +162,33 @@ class ProvisioningService(
             SYSTEM "You are the Master Architect, an elite Android Lead Engineer."
         """.trimIndent()
         
-        File(optDir, "Modelfile").writeText(modelfile)
-        
-        val process = ProcessBuilder("ollama", "create", model.name, "-f", File(optDir, "Modelfile").absolutePath)
-            .directory(projectRoot)
-            .redirectErrorStream(true)
-            .start()
-        
-        process.inputStream.bufferedReader().useLines { lines ->
-            lines.forEach { line ->
-                if (line.isNotBlank()) {
-                    updateStatus(model.name, ProvisioningStage.REGISTERING, 0.95f, message = line.trim())
-                }
+        updateStatus(model.name, ProvisioningStage.REGISTERING, 0.92f, message = "Sending Modelfile to Ollama...")
+
+        try {
+            val response: HttpResponse = client.post("$ollamaHost/api/create") {
+                contentType(io.ktor.http.ContentType.Application.Json)
+                setBody(buildJsonObject {
+                    put("name", model.name)
+                    put("modelfile", modelfileContent)
+                    put("stream", true)
+                })
             }
+
+            if (response.status.value == 200) {
+                response.bodyAsText().lines().forEach { line ->
+                    if (line.isNotBlank()) {
+                        val status = json.parseToJsonElement(line).jsonObject["status"]?.jsonPrimitive?.content
+                        if (status != null) {
+                            updateStatus(model.name, ProvisioningStage.REGISTERING, 0.95f, message = status)
+                        }
+                    }
+                }
+            } else {
+                throw Exception("Ollama API Error: ${response.status}")
+            }
+        } catch (e: Exception) {
+            throw Exception("Ollama registration failed: ${e.message}")
         }
-        
-        val exitCode = process.waitFor()
-        if (exitCode != 0) throw Exception("Ollama build failed with exit code $exitCode")
     }
 
     private fun calculateGpuLayers(name: String): Int {
@@ -181,20 +204,27 @@ class ProvisioningService(
             try {
                 val fleet = fleetManager.getFleet().map { it.name }.toSet()
                 
-                val process = ProcessBuilder("ollama", "list").start()
-                val installed = process.inputStream.bufferedReader().readLines().drop(1).map { it.split(" ").first().split(":").first() }
-                
-                installed.forEach { model ->
-                    if (!fleet.contains(model)) {
-                        println("[Prune] Removing unmanaged model: $model")
-                        ProcessBuilder("ollama", "rm", model).start().waitFor()
+                val response: HttpResponse = client.get("$ollamaHost/api/tags")
+                if (response.status.value == 200) {
+                    val body = response.bodyAsText()
+                    val jsonElement = json.parseToJsonElement(body).jsonObject
+                    val installed = jsonElement["models"]?.jsonArray?.map { it.jsonObject["name"]?.jsonPrimitive?.content?.split(":")?.first() ?: "" } ?: emptyList()
+                    
+                    installed.forEach { model ->
+                        if (model.isNotEmpty() && !fleet.contains(model)) {
+                            println("[Prune] Removing unmanaged model: $model")
+                            client.delete("$ollamaHost/api/delete") {
+                                contentType(io.ktor.http.ContentType.Application.Json)
+                                setBody(buildJsonObject { put("name", model) })
+                            }
+                        }
                     }
                 }
                 
                 File(projectRoot, ".cache").listFiles()?.forEach { it.deleteRecursively() }
                 println("[Prune] Fleet pruned and disk space reclaimed.")
             } catch (e: Exception) {
-                println("[Prune] Error: ${e.message}")
+                println("[Prune] Error during prune: ${e.message}")
             }
         }
     }
