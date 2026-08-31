@@ -43,16 +43,22 @@ class ProvisioningService(
                         "--include", model.filePattern,
                         "--local-dir", "${projectRoot}/downloads/${model.name}",
                         "--max-workers", "8"
-                    ).directory(projectRoot).start()
+                    ).directory(projectRoot)
+                    .redirectErrorStream(true)
+                    .start()
                     
-                    // Simple progress tracking
-                    while (process.isAlive) {
-                        delay(2000)
-                        // In real implementation, parse process output for real progress
+                    process.inputStream.bufferedReader().useLines { lines ->
+                        lines.forEach { line ->
+                            // Update status with the latest download line (contains speed/progress)
+                            if (line.contains("%") || line.contains("MB/s")) {
+                                updateStatus(model.name, ProvisioningStage.DOWNLOADING, message = line.trim())
+                            }
+                        }
                     }
                     
-                    if (process.exitValue() != 0) {
-                        updateStatus(model.name, ProvisioningStage.ERROR, message = "Download failed")
+                    val exitCode = process.waitFor()
+                    if (exitCode != 0) {
+                        updateStatus(model.name, ProvisioningStage.ERROR, message = "Download failed (Code $exitCode)")
                         return@launch
                     }
 
@@ -106,10 +112,21 @@ class ProvisioningService(
         
         val process = ProcessBuilder("ollama", "create", model.name, "-f", "${optDir}/Modelfile")
             .directory(projectRoot)
+            .redirectErrorStream(true)
             .start()
         
-        process.waitFor()
-        if (process.exitValue() != 0) throw Exception("Ollama creation failed")
+        // Stream the build logs to the status message
+        process.inputStream.bufferedReader().useLines { lines ->
+            lines.forEach { line ->
+                // Filter out the noise and update progress
+                if (line.isNotBlank()) {
+                    updateStatus(model.name, ProvisioningStage.REGISTERING, 0.95f, message = line.trim())
+                }
+            }
+        }
+        
+        val exitCode = process.waitFor()
+        if (exitCode != 0) throw Exception("Ollama build failed with exit code $exitCode")
     }
 
     private fun calculateGpuLayers(name: String): Int {
