@@ -48,8 +48,8 @@ class ProvisioningService(
             try {
                 updateStatus(model.name, ProvisioningStage.SCANNING, 0f, message = "Checking remote status...")
                 
-                val optDir = File(projectRoot, "optimizations/${model.name}").apply { mkdirs() }
-                val shaFile = File(optDir, "last_sync_sha")
+                val regDir = File(projectRoot, "registry/${model.name}").apply { mkdirs() }
+                val shaFile = File(regDir, "last_sync_sha")
                 val localSha = if (shaFile.exists()) shaFile.readText().trim() else ""
                 
                 val remoteSha = try {
@@ -72,7 +72,7 @@ class ProvisioningService(
                 if (remoteSha != localSha || !isInstalled) {
                     updateStatus(model.name, ProvisioningStage.DOWNLOADING, 0.1f, message = "Downloading model...")
                     
-                    val dlDir = File(projectRoot, "downloads/${model.name}").apply { mkdirs() }
+                    val dlDir = File(projectRoot, ".cache/${model.name}").apply { mkdirs() }
                     
                     val process = ProcessBuilder(
                         "hf", "download", model.repo, 
@@ -98,7 +98,7 @@ class ProvisioningService(
                     }
 
                     updateStatus(model.name, ProvisioningStage.REGISTERING, 0.9f, message = "Building Ollama model...")
-                    registerInOllama(model, optDir, dlDir)
+                    registerInOllama(model, regDir, dlDir)
                     
                     if (remoteSha.isNotEmpty()) {
                         shaFile.writeText(remoteSha)
@@ -191,7 +191,7 @@ class ProvisioningService(
                     }
                 }
                 
-                File(projectRoot, "downloads").listFiles()?.forEach { it.deleteRecursively() }
+                File(projectRoot, ".cache").listFiles()?.forEach { it.deleteRecursively() }
                 println("[Prune] Fleet pruned and disk space reclaimed.")
             } catch (e: Exception) {
                 println("[Prune] Error: ${e.message}")
@@ -207,7 +207,7 @@ class ProvisioningService(
             File(projectRoot, "config").listFiles()?.forEach { file ->
                 if (file.isFile) file.copyTo(File(backupDir, file.name))
             }
-            File(projectRoot, "optimizations").copyRecursively(File(backupDir, "optimizations"), overwrite = true)
+            File(projectRoot, "registry").copyRecursively(File(backupDir, "registry"), overwrite = true)
             println("[Backup] Configuration backed up to ${backupDir.absolutePath}")
         } catch (e: Exception) {
             println("[Backup] Error: ${e.message}")

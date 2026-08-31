@@ -5,10 +5,10 @@
 
 CORE_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT="$( dirname "$CORE_DIR" )"
-DOWNLOAD_DIR="$PROJECT_ROOT/downloads"; OPT_DIR="$PROJECT_ROOT/optimizations"
+CACHE_DIR="$PROJECT_ROOT/.cache"; REGISTRY_DIR="$PROJECT_ROOT/registry"
 SCRIPTS_DIR="$PROJECT_ROOT/tooling"; DATA_DIR="$PROJECT_ROOT/data"
 LOG_DIR="$PROJECT_ROOT/logs"; LOG_FILE="$LOG_DIR/provisioner.log"
-mkdir -p "$DOWNLOAD_DIR" "$OPT_DIR" "$LOG_DIR"
+mkdir -p "$CACHE_DIR" "$REGISTRY_DIR" "$LOG_DIR"
 
 DL_METHOD="hf"
 
@@ -45,7 +45,7 @@ calculate_gpu_layers() {
 }
 
 get_model_params() {
-    local model_name=$1; local param_file="$OPT_DIR/$model_name/user_params"
+    local model_name=$1; local param_file="$REGISTRY_DIR/$model_name/user_params"
     [ -f "$param_file" ] && cat "$param_file" || echo "PARAMETER temperature 0.7\nPARAMETER top_p 0.9"
 }
 
@@ -56,8 +56,8 @@ provision_model() {
     log "----------------------------------------------------"
     log ">>> SYNC CHECK: [$provider] $target_name"
 
-    local model_opt_dir="$OPT_DIR/$target_name"; local local_sha_file="$model_opt_dir/last_sync_sha"
-    mkdir -p "$model_opt_dir"
+    local model_reg_dir="$REGISTRY_DIR/$target_name"; local local_sha_file="$model_reg_dir/last_sync_sha"
+    mkdir -p "$model_reg_dir"
 
     # Cloud providers are always "provisioned"
     if [[ "$provider" == "openai" || "$provider" == "anthropic" || "$provider" == "gemini" ]]; then
@@ -81,16 +81,16 @@ provision_model() {
     fi
 
     log "[UPDATE] Provisioning $target_name via $provider..."
-    local model_dl_dir="$DOWNLOAD_DIR/$target_name"; mkdir -p "$model_dl_dir"
+    local model_cache_dir="$CACHE_DIR/$target_name"; mkdir -p "$model_cache_dir"
 
     if [[ "$DL_METHOD" == "hf" ]]; then
         export HF_HUB_ENABLE_HF_TRANSFER=1
-        hf download "$repo" --include "$file_pattern" --local-dir "$model_dl_dir" --max-workers 8 || return 1
+        hf download "$repo" --include "$file_pattern" --local-dir "$model_cache_dir" --max-workers 8 || return 1
     fi
 
-    local final_gguf="$model_dl_dir/model.gguf"
-    local found_file=$(find "$model_dl_dir" -name "*.gguf" | head -n 1)
-    if [[ -z "$found_file" ]]; then merge_gguf "$model_dl_dir" "$final_gguf"; found_file=$(find "$model_dl_dir" -name "*.gguf" | head -n 1); fi
+    local final_gguf="$model_cache_dir/model.gguf"
+    local found_file=$(find "$model_cache_dir" -name "*.gguf" | head -n 1)
+    if [[ -z "$found_file" ]]; then merge_gguf "$model_cache_dir" "$final_gguf"; found_file=$(find "$model_cache_dir" -name "*.gguf" | head -n 1); fi
 
     if [[ -z "$found_file" || ! -f "$found_file" ]]; then
         log "[ERROR] No model file found for $target_name after download."
@@ -98,7 +98,7 @@ provision_model() {
     fi
 
     if [[ "$provider" == "ollama" ]]; then
-        provision_ollama "$target_name" "$found_file" "$model_opt_dir"
+        provision_ollama "$target_name" "$found_file" "$model_reg_dir"
     elif [[ "$provider" == "localai" ]]; then
         provision_localai "$target_name" "$found_file"
     else
@@ -106,7 +106,7 @@ provision_model() {
     fi
 
     echo "$remote_sha" > "$local_sha_file"
-    rm -rf "$model_dl_dir"
+    rm -rf "$model_cache_dir"
 }
 
 provision_ollama() {
@@ -146,8 +146,8 @@ prune_fleet() {
             ollama rm "$inst" >/dev/null 2>&1
         fi
     done
-    # 2. Cleanup partial downloads
-    rm -rf "$DOWNLOAD_DIR"/*
+    # 2. Cleanup cache
+    rm -rf "$CACHE_DIR"/*
     log "[SUCCESS] Fleet pruned and disk space reclaimed."
 }
 
@@ -155,8 +155,8 @@ backup_config() {
     local ts=$(date +%Y%m%d_%H%M%S)
     local b_dir="$PROJECT_ROOT/data/backups/$ts"
     mkdir -p "$b_dir"
-    cp "$FLEET_CONF" "$b_dir/"
-    cp -r "$OPT_DIR" "$b_dir/"
+    cp "$FLEET_JSON" "$b_dir/"
+    cp -r "$REGISTRY_DIR" "$b_dir/"
     cp "$PROJECT_ROOT/config/"*.env "$b_dir/"
     log "[SUCCESS] Configuration backed up to $b_dir"
 }

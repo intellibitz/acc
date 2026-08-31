@@ -60,7 +60,7 @@ setup_env() {
     ensure_system_deps
     ensure_python_env
 
-    mkdir -p "$PROJECT_ROOT/logs" "$PROJECT_ROOT/downloads" "$PROJECT_ROOT/optimizations" "$PROJECT_ROOT/data/backups" "$PROJECT_ROOT/config"
+    mkdir -p "$PROJECT_ROOT/logs" "$PROJECT_ROOT/.cache" "$PROJECT_ROOT/registry" "$PROJECT_ROOT/data/backups" "$PROJECT_ROOT/config"
 
     if [ ! -f "$PROJECT_ROOT/config/keystore.p12" ]; then
         log "Generating secure local identity..."
