@@ -217,7 +217,8 @@ case "$1" in
 
         if [ -f "/etc/sysctl.d/99-llm-hw.conf" ]; then
             log "Removing hardware tweaks..."
-            sudo rm "/etc/sysctl.d/99-llm-hw.conf" && sudo sysctl -p /etc/sysctl.d/99-llm-hw.conf || true
+            sudo rm "/etc/sysctl.d/99-llm-hw.conf" 2>/dev/null
+            sudo sysctl --system >/dev/null 2>&1 || true
         fi
         log "\033[1;32mSUCCESS!\033[0m Acc has been uninstalled."
         ;;
