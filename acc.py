@@ -136,7 +136,11 @@ def handle_dev_commands(args):
 
     import re
     if args.dev == "test":
-        current_tag = run_shell("git describe --tags --abbrev=0", capture=True) or "v0.0.0"
+        try:
+            current_tag = run_shell("git describe --tags --abbrev=0", capture=True)
+        except:
+            current_tag = "v0.0.0"
+        
         base_match = re.match(r'^(v\d+\.\d+\.\d+)', current_tag)
         base_version = base_match.group(1) if base_match else "v0.0.0"
         
