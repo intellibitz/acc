@@ -52,10 +52,11 @@ cd acc
 ## 🏗️ The "Zero-Effort" Workflow
 When you run `acc` for the first time:
 1.  **Instant Visuals**: The dashboard launches immediately in your browser.
-2.  **Visual Bootstrapping**: acc performs a full dependency audit and hardware tuning while streaming status updates directly to your screen.
-3.  **Elite Provisioning**: Models are downloaded and optimized using hardware-aware logic within the Kotlin Gateway.
-4.  **Persistent Monitoring**: High-efficiency hardware tracking via a persistent JSON stream bridge.
-5.  **Unified Control**: Control everything—provision models, tune hardware, and watch agent thought streams—directly from the dashboard.
+2.  **Automated Audit**: acc performs a full system audit, auto-installing missing tools (`tmux`, `jq`, `java`) and managing an isolated **Python .venv** automatically.
+3.  **Visual Bootstrapping**: Status updates are streamed directly to your screen while hardware tuning and background frontend builds occur.
+4.  **Elite Provisioning**: Models are downloaded and optimized using hardware-aware logic within the Kotlin Gateway.
+5.  **Persistent Monitoring**: High-efficiency hardware tracking via a persistent JSON stream bridge with integrated health diagnostics.
+6.  **Unified Control**: Control everything—provision models, tune hardware, and watch agent thought streams—directly from the dashboard.
 
 ## 🛠️ Orchestrator Commands
 The `acc` script acts as a smart dispatcher for your workstation:
@@ -85,6 +86,7 @@ The `acc` script acts as a smart dispatcher for your workstation:
 acc is built like a production container orchestrator:
 - **Manager-Worker Model**: The Gateway acts as a Control Plane, supervising all background processes.
 - **Auto-Heal**: If a metrics bridge or agent crashes, the Manager automatically detects and restarts it.
+- **Health Diagnostics**: The system bridge identifies missing Python dependencies and propagates actionable "fix-it" messages to the UI status bar.
 - **Console Sandbox**: The terminal interface is restricted to a white-list of safe maintenance and provisioning commands, preventing Remote Code Execution (RCE).
 - **Secret Management**: Sensitive data, such as keystore passwords, are managed via environment variables (`ACC_KEYSTORE_PASSWORD`).
 - **Bootstrap UI**: In fresh environments, the Manager serves a live "Bootstrap Page" showing real-time build and setup progress until the cockpit is ready.
@@ -100,7 +102,8 @@ acc maintains high stability through a multi-layered testing strategy:
 ## 🛠️ Prerequisites
 - **OS**: Linux (Ubuntu/Debian) or WSL2.
 - **Hardware**: NVIDIA GPU (Optional, but highly recommended).
-- **Toolchain**: `docker`, `tmux`, `jq`, `python3`, `OpenJDK 21+`.
+- **Auto-Managed**: `tmux`, `jq`, `python3-venv`, `OpenJDK 21+` (Attempted auto-installation on setup).
+- **Manual**: `docker` (if using external providers).
 
 ---
 

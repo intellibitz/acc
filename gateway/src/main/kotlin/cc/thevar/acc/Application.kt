@@ -131,6 +131,11 @@ fun Application.module() {
                 if (output.startsWith("{") && output.endsWith("}")) {
                     val bridgeData = Json.parseToJsonElement(output).jsonObject
                     
+                    if (bridgeData.containsKey("error")) {
+                        systemStatusMsg = bridgeData["error"]?.jsonPrimitive?.content ?: "Bridge Error"
+                        return@collect
+                    }
+
                     val fullState = SystemState(
                         stats = Json.decodeFromJsonElement<SystemStats>(bridgeData["stats"]!!),
                         fleet = Json.decodeFromJsonElement<List<ModelStatus>>(bridgeData["fleet"]!!),

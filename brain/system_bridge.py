@@ -1,4 +1,3 @@
-import psutil
 import subprocess
 import json
 import os
@@ -6,6 +5,12 @@ import requests
 import re
 import time
 import sys
+
+# Robust import handling for "Zero-Effort" diagnostics
+try:
+    import psutil
+except ImportError:
+    psutil = None
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -24,7 +29,6 @@ def get_fleet_disk_usage():
     try:
         ollama_dir = os.path.expanduser("~/.ollama/models")
         if not os.path.exists(ollama_dir): return "N/A"
-        # Using du without shell=True where possible
         process = subprocess.Popen(["du", "-sh", ollama_dir], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out, _ = process.communicate()
         return out.decode().split()[0]
@@ -54,39 +58,12 @@ def get_fleet_config():
                     if m.get("isPrivate"): private.append(m["name"])
                     else: managed.append(m["name"])
         except: pass
-    else:
-        # Fallback to legacy
-        fleet_path = os.path.join(PROJECT_ROOT, "config/fleet.conf")
-        private_path = os.path.join(PROJECT_ROOT, "config/private_fleet.conf")
-        
-        def parse_conf(path, target_list):
-            if os.path.exists(path):
-                try:
-                    with open(path, 'r') as f:
-                        content = f.read()
-                        matches = re.findall(r'"([^"|]+\|[^"|]+)\|', content)
-                        for m in matches: target_list.append(m.split('|')[1])
-                except: pass
-        parse_conf(fleet_path, managed)
-        parse_conf(private_path, private)
-        
     return managed, private
 
-def get_partial_downloads():
-    partials = []
-    dl_dir = os.path.join(PROJECT_ROOT, "downloads")
-    if os.path.exists(dl_dir):
-        try:
-            for d in os.listdir(dl_dir):
-                path = os.path.join(dl_dir, d)
-                if os.path.isdir(path):
-                    files = os.listdir(path)
-                    if any(f.endswith(".part") or ".part" in f for f in files):
-                        partials.append(d)
-        except: pass
-    return partials
-
 def get_system_state():
+    if psutil is None:
+        return {"error": "Missing dependency: psutil. Run './acc setup' to fix.", "stats": None}
+
     cpu = psutil.cpu_percent()
     ram = psutil.virtual_memory()
     gpu = get_gpu_stats()
@@ -94,7 +71,6 @@ def get_system_state():
     
     ollama = get_ollama_status()
     managed, private = get_fleet_config()
-    partials = get_partial_downloads()
     
     fleet = []
     if ollama.get("online"):
@@ -111,12 +87,6 @@ def get_system_state():
                 "type": "PRIV" if name in private else "COMM"
             })
 
-    proxy_online = False
-    try:
-        resp = requests.get("http://localhost:4000/health", timeout=0.5)
-        proxy_online = resp.status_code == 200
-    except: pass
-
     return {
         "stats": {
             "cpuUtilization": cpu,
@@ -126,20 +96,16 @@ def get_system_state():
             "diskUsage": disk
         },
         "fleet": fleet,
-        "partialDownloads": partials,
-        "proxyOnline": proxy_online
+        "proxyOnline": False
     }
 
 if __name__ == "__main__":
-    # Persistence mode: loop and emit JSON every 2 seconds
     while True:
         try:
             state = get_system_state()
             print(json.dumps(state))
             sys.stdout.flush()
         except Exception as e:
-            # Emit error in a way that doesn't break the JSON consumer if possible, 
-            # but here we just print to stderr
             sys.stderr.write(f"Bridge Error: {str(e)}\n")
             sys.stderr.flush()
         time.sleep(2)

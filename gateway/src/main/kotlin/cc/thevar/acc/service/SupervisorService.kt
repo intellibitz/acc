@@ -18,8 +18,11 @@ class SupervisorService(private val projectRoot: File) {
     val workerStates = _workerStates.asStateFlow()
 
     init {
+        val venvPython = File(projectRoot, ".venv/bin/python3").absolutePath
+        val pythonCmd = if (File(venvPython).exists()) venvPython else "python3"
+
         // Register core workers
-        registerWorker("SYSTEM_BRIDGE", listOf("python3", "brain/system_bridge.py"), restartPolicy = true)
+        registerWorker("SYSTEM_BRIDGE", listOf(pythonCmd, "brain/system_bridge.py"), restartPolicy = true)
         registerWorker("FRONTEND_BUILDER", listOf("./gradlew", ":frontend:web:wasmJsBrowserDistribution", "--quiet"), restartPolicy = false)
         
         // Start core workers automatically

@@ -1,18 +1,77 @@
 #!/bin/bash
 # ==============================================================================
-# AI COMMAND CENTER (acc) - ULTIMATE SMART ORCHESTRATOR
+# AI COMMAND CENTER (acc) - TRUE ZERO-EFFORT ORCHESTRATOR
 # ==============================================================================
 
 PROJECT_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 CORE_DIR="$PROJECT_ROOT/common"
 RUN_DIR="$PROJECT_ROOT/data/run"; mkdir -p "$RUN_DIR"
-INIT_SENTINEL="$PROJECT_ROOT/data/.initialized"
+VENV_DIR="$PROJECT_ROOT/.venv"
 
 PROVISIONER="bash $CORE_DIR/provisioner.sh"
 OSM="bash $CORE_DIR/osm.sh"
 DASH_PID_FILE="$RUN_DIR/dash.pid"; LOCK_FILE="$RUN_DIR/acc.lock"
 
 log() { echo -e "[\033[1;34macc\033[0m] $1"; }
+error() { echo -e "[\033[1;31merror\033[0m] $1"; }
+
+ensure_system_deps() {
+    log "Auditing system dependencies..."
+    local missing=()
+    for cmd in tmux jq ollama java curl keytool; do
+        if ! command -v $cmd &> /dev/null; then missing+=("$cmd"); fi
+    done
+
+    if [ ${#missing[@]} -gt 0 ]; then
+        log "Missing tools: [${missing[*]}]. Attempting auto-install..."
+        if command -v apt-get &> /dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y tmux jq openjdk-21-jdk curl
+        else
+            error "Automatic installation only supported on Debian/Ubuntu. Please install manually: [${missing[*]}]"
+            exit 1
+        fi
+    fi
+}
+
+ensure_python_env() {
+    if [ ! -d "$VENV_DIR" ]; then
+        log "Creating isolated Python environment (.venv)..."
+        python3 -m venv "$VENV_DIR" || { error "Failed to create venv. Ensure 'python3-venv' is installed."; exit 1; }
+    fi
+
+    source "$VENV_DIR/bin/activate"
+    log "Syncing Python dependencies..."
+    pip install -q --upgrade pip
+    pip install -q -r "$PROJECT_ROOT/requirements.txt"
+}
+
+setup_env() {
+    ensure_system_deps
+    ensure_python_env
+
+    mkdir -p "$PROJECT_ROOT/logs" "$PROJECT_ROOT/downloads" "$PROJECT_ROOT/optimizations" "$PROJECT_ROOT/data/backups" "$PROJECT_ROOT/config"
+
+    if [ ! -f "$PROJECT_ROOT/config/keystore.p12" ]; then
+        log "Generating secure local identity..."
+        keytool -genkeypair -alias acc -keyalg RSA -keysize 2048 -storetype PKCS12 \
+            -keystore "$PROJECT_ROOT/config/keystore.p12" -validity 365 \
+            -storepass password -keypass password \
+            -dname "CN=localhost, OU=acc, O=intellibitz, L=Unknown, ST=Unknown, C=Unknown" > /dev/null 2>&1
+    fi
+
+    # Load .env if exists
+    if [ -f "$PROJECT_ROOT/.env" ]; then
+        set -a; source "$PROJECT_ROOT/.env"; set +a
+    fi
+
+    if [ ! -f "$PROJECT_ROOT/config/fleet.json" ]; then
+        log "Initializing default fleet..."
+        echo '{"models": [{"name": "phi3", "repo": "microsoft/Phi-3-mini-4k-instruct-gguf", "filePattern": "*Q4_K_M.gguf", "tier": "FAST", "quant": "Q4_K_M", "isPrivate": false}]}' > "$PROJECT_ROOT/config/fleet.json"
+    fi
+
+    $OSM sync --auto; $OSM tune
+}
 
 cleanup_dash() {
     [ -f "$DASH_PID_FILE" ] && { pid=$(cat "$DASH_PID_FILE"); kill "$pid" 2>/dev/null; sleep 1; rm "$DASH_PID_FILE"; }
@@ -22,204 +81,69 @@ cleanup_dash() {
 open_url() {
     if command -v xdg-open &> /dev/null; then xdg-open "$1" &> /dev/null;
     elif command -v open &> /dev/null; then open "$1" &> /dev/null;
-    else log "Please open: $1"; fi
-}
-
-setup_env() {
-    log "Performing System Health Audit..."
-    local missing=()
-    for cmd in tmux jq hf ollama docker java curl keytool; do
-        if ! command -v $cmd &> /dev/null; then missing+=("$cmd"); fi
-    done
-
-    if [ ${#missing[@]} -gt 0 ]; then
-        log "\033[1;31mCRITICAL\033[0m: Missing required tools: [${missing[*]}]"
-        log "Please install them using your package manager (e.g., sudo apt install tmux jq default-jdk curl)."
-        exit 1
-    fi
-
-    log "Verifying Python dependencies..."
-    pip install -r "$PROJECT_ROOT/requirements.txt" --quiet --break-system-packages 2>/dev/null || \
-    pip install -r "$PROJECT_ROOT/requirements.txt" --quiet
-
-    mkdir -p "$PROJECT_ROOT/logs" "$PROJECT_ROOT/downloads" "$PROJECT_ROOT/optimizations" "$PROJECT_ROOT/data/backups" "$PROJECT_ROOT/config"
-
-    # Generate Self-Signed Certificate for HTTPS
-    if [ ! -f "$PROJECT_ROOT/config/keystore.p12" ]; then
-        log "Generating secure local identity..."
-        keytool -genkeypair -alias acc -keyalg RSA -keysize 2048 -storetype PKCS12 \
-            -keystore "$PROJECT_ROOT/config/keystore.p12" -validity 365 \
-            -storepass password -keypass password \
-            -dname "CN=localhost, OU=acc, O=intellibitz, L=Unknown, ST=Unknown, C=Unknown" > /dev/null 2>&1
-    fi
-
-    # Load HF Token if exists (safely)
-    if [ -z "$HF_TOKEN" ] && [ -f "$PROJECT_ROOT/.env" ]; then
-        # Filter out common read-only/system variables and source the rest
-        # Using a more surgical approach to avoid shell-specific read-only errors
-        while IFS= read -r line || [[ -n "$line" ]]; do
-            [[ "$line" =~ ^#.* ]] && continue
-            [[ -z "$line" ]] && continue
-            if [[ "$line" == *"="* ]]; then
-                key="${line%%=*}"
-                value="${line#*=}"
-                # Explicitly skip variables that should never be exported manually
-                case "$key" in
-                    PWD|SHLVL|_|UID|EUID|BASH*|SHELL*|TERM*|DISPLAY|LANG|USER|HOME|PATH) ;;
-                    *)
-                        # Use a subshell test to see if it's exportable
-                        if (export "$key=$value") >/dev/null 2>&1; then
-                            export "$key=$value"
-                        fi
-                        ;;
-                esac
-            fi
-        done < "$PROJECT_ROOT/.env"
-    fi
-
-    # Initialize default config if missing
-    if [ ! -f "$PROJECT_ROOT/config/fleet.conf" ]; then
-        echo "MODELS=(\"ollama|phi3|microsoft/Phi-3-mini-4k-instruct-gguf|*Q4_K_M.gguf|FAST|Q4_K_M|Lightweight|hf://microsoft/Phi-3-mini-4k-instruct-gguf\")" > "$PROJECT_ROOT/config/fleet.conf"
-    fi
-
-    $OSM sync --auto; $OSM tune
+    else log "Dashboard ready at: $1"; fi
 }
 
 smart_start() {
-    # Ensure essential directories exist for the Manager to start
-    mkdir -p "$PROJECT_ROOT/logs" "$PROJECT_ROOT/data/run" "$PROJECT_ROOT/config"
-
-    # Check if Manager is already running
     if curl -sk http://localhost:8333/health > /dev/null; then
-        log "Acc Manager is already running. Opening dashboard..."
+        log "Acc Manager is active."
         open_url "http://localhost:8333"
         return
     fi
 
-    # Reduced to Bootstrap Launcher
+    ensure_system_deps
+    ensure_python_env
     cleanup_dash
 
-    log "Starting AI Command Center [Manager]..."
+    log "Launching AI Command Center..."
     nohup bash "$PROJECT_ROOT/acc" gui > /dev/null 2>&1 &
 
-    # Setup TMUX for logs
-    tmux has-session -t acc 2>/dev/null || tmux new-session -d -s acc -n "Gateway" "bash $PROJECT_ROOT/acc logs"
-
-    # Smart background waiter for the correct protocol
     (
-        timeout=120
+        timeout=60
         while [ $timeout -gt 0 ]; do
             if curl -sk http://localhost:8333/health > /dev/null; then
-                log "[SUCCESS] Acc Manager is live."
+                log "[SUCCESS] Cockpit online."
                 open_url "http://localhost:8333"
                 exit 0
             fi
             sleep 2
             ((timeout--))
         done
-        log "\033[1;31mERROR\033[0m: Manager timed out. Check logs/gateway.log"
+        error "Manager failed to start. See logs/gateway.log"
     ) &
 }
 
-METHOD="hf"
-for arg in "$@"; do [[ "$arg" == --method=* ]] && METHOD="${arg#--method=}"; done
-
 case "$1" in
     setup) setup_env ;;
-    up)
-        log "Triggering Elite Provisioning via Gateway..."
-        curl -skX POST https://localhost:8333/provisioning/up || {
-            log "[FALLBACK] Gateway unreachable. Using legacy provisioner."
-            [ -f "$LOCK_FILE" ] && { log "Busy."; exit 1; }; touch "$LOCK_FILE"; $PROVISIONER maintain "$2" --method "$METHOD"; rm "$LOCK_FILE"
-        }
-        ;;
-    dash) cleanup_dash; python3 "$PROJECT_ROOT/tooling/tui_dashboard.py" ;;
+    up) curl -skX POST https://localhost:8333/provisioning/up ;;
+    dash) source "$VENV_DIR/bin/activate"; python3 "$PROJECT_ROOT/tooling/tui_dashboard.py" ;;
     status) $OSM status ;;
     sync) $OSM sync ;;
     tune-hw) $OSM tune ;;
-    update-ollama) $OSM update-engine ;;
-    fitness) $PROVISIONER fitness ;;
-    search) $PROVISIONER search "$2" ;;
-    add) $PROVISIONER add "$2" "$3" ;;
-    remove) $PROVISIONER remove "$2" ;;
-    tune-model) $PROVISIONER tune-model "$2" "$3" ;;
-    backup) $PROVISIONER backup ;;
-
-    # --- MAINTENANCE (The Mechanic) ---
     maint)
         case "$2" in
-            kill) bash "$PROJECT_ROOT/tooling/kill_gradle.sh" ;;
-            rotate) $OSM rotate ;;
+            kill) ./gradlew --stop; pkill -f "cc.thevar.acc" ;;
             prune) $PROVISIONER prune ;;
-            clean) rm -rf "$PROJECT_ROOT/data/run"/* ;;
-            *) echo "Usage: ./acc maint [kill|rotate|prune|clean]" ;;
+            *) echo "Usage: ./acc maint [kill|prune]" ;;
         esac
-        ;;
-
-    # --- DEVELOPER (The Architect) ---
-    dev)
-        case "$2" in
-            push) bash "$PROJECT_ROOT/tooling/push.sh" "$3" ;;
-            pull) git pull origin "$(git rev-parse --abbrev-ref HEAD)" ;;
-            benchmark) python3 "$PROJECT_ROOT/tooling/benchmark_ollama.py" ;;
-            *) echo "Usage: ./acc dev [push|pull|benchmark]" ;;
-        esac
-        ;;
-    refresh)
-        log "REFRESHING ACC..."
-        bash "$PROJECT_ROOT/acc" stop
-        bash "$PROJECT_ROOT/acc" setup
-        log "Restarting..."
-        exec bash "$PROJECT_ROOT/acc"
-        ;;
-    update)
-        log "UPDATING ACC TO LATEST..."
-        git pull origin "$(git rev-parse --abbrev-ref HEAD)"
-        bash "$PROJECT_ROOT/acc" setup
-        log "Update complete. Restarting services..."
-        bash "$PROJECT_ROOT/acc" stop
-        exec bash "$PROJECT_ROOT/acc"
-        ;;
-    proxy)
-        log "Starting LiteLLM Proxy..."
-        if [ -f "$PROJECT_ROOT/config/litellm_config.yaml" ]; then
-            litellm --config "$PROJECT_ROOT/config/litellm_config.yaml"
-        else
-            log "[WARN] No litellm_config.yaml found. Using default Ollama bridge."
-            litellm --model ollama/phi3
-        fi
         ;;
     gui)
-        # Silence Node noise during build
         export NODE_OPTIONS="--no-deprecation"
-
+        # Start the build in background if missing
         if [ ! -d "frontend/web/build/dist/wasmJs/productionExecutable" ]; then
-            ./gradlew :frontend:web:wasmJsBrowserDistribution --quiet || exit 1
+            log "Triggering background frontend build..."
+            nohup ./gradlew :frontend:web:wasmJsBrowserDistribution --quiet > logs/build.log 2>&1 &
         fi
 
-        # Check if port is already in use
-        if command -v lsof &> /dev/null; then
-            if lsof -Pi :8333 -sTCP:LISTEN -t >/dev/null ; then
-                exit 0
-            fi
-        fi
-
-        # Start Gateway
+        source "$VENV_DIR/bin/activate"
         ./gradlew :gateway:run --no-daemon > "$PROJECT_ROOT/logs/gateway.log" 2>&1
         ;;
-    agent) python3 "$PROJECT_ROOT/brain/autonomous_architect.py" ;;
-    chat) log "Opening Interactive Chat..."; ollama run "${2:-phi3}" ;;
-    benchmark) python3 "$PROJECT_ROOT/tooling/benchmark_ollama.py" ;;
-    auto-scale) log "Auto-scaling fleet to hardware capabilities..."; $PROVISIONER auto-scale ;;
-    brain) cat "$PROJECT_ROOT/brain.md" ;;
-    logs) tail -f "$PROJECT_ROOT/logs/provisioner.log" ;;
     stop)
         cleanup_dash
-        tmux kill-session -t acc 2>/dev/null
         $OSM stop
-        pkill -f "gateway"
-        log "Down."
+        pkill -f "cc.thevar.acc"
+        log "System stopped."
         ;;
-    ""|help) [[ -z "$1" ]] && smart_start || echo "Usage: ./acc [setup|up|dash|status|sync|tune-hw|update|maint|dev|proxy|agent|chat|stop]" ;;
+    ""|help) [[ -z "$1" ]] && smart_start || echo "Usage: ./acc [setup|up|dash|status|sync|tune-hw|maint|stop]" ;;
     *) echo "Unknown: $1"; exit 1 ;;
 esac
