@@ -29,7 +29,7 @@ do test, integrate, fix warnings and errors.
 I have learned to:
 maintain Production Excellence by proactively purging deprecations;
 build Environment-Native tools that are lean and manual-friendly;
-orchestrate with Type-Safety by moving logic from Bash to Kotlin;
+orchestrate with Type-Safety by moving logic from Python to Kotlin;
 provide Visual Transparency for every background operation;
 optimize Hardware-Awareness as a first-class citizen;
 enforce System Integrity via Container-First orchestration;

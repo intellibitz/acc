@@ -49,8 +49,6 @@ docker run -p 8333:8333 -v /var/run/docker.sock:/var/run/docker.sock intellibitz
 ```
 Once the cockpit is up, open **`http://localhost:8333`** to manage your fleet, engines, and agents with total zero-effort.
 
-Once installed, just run `python3 acc.py` to start.
-
 ---
 
 ## 🏗️ The "Zero-Footprint" Architecture
@@ -75,17 +73,16 @@ The `acc` script acts as a smart dispatcher for your workstation:
 ### 🔧 Maintenance (The Mechanic)
 | Command | Action |
 | :--- | :--- |
-| **`./acc maint kill`** | Surgical purge of stale Java/Gradle/Kotlin processes. |
-| **`./acc maint prune`** | Reclaim disk space by cleaning the fleet and downloads. |
-| **`./acc maint rotate`** | Rotate and clean service logs. |
+| **`python3 acc.py stop`** | Gracefully shutdown all services and agents. |
+| **`python3 acc.py uninstall --force`** | Reclaim disk space by cleaning the fleet and registry. |
 
 ### 📐 Developer (The Architect)
 | Command | Action |
 | :--- | :--- |
-| **`./acc dev push`** | Auto-stage and push project changes to GitHub. |
-| **`./acc dev test`** | Tag and trigger a Test/RC release workflow. |
-| **`./acc dev release`** | Branch, tag stable, and trigger the official release. |
-| **`./acc dev benchmark`** | Run the token-per-second (TPS) performance suite. |
+| **`python3 acc.py dev push`** | Auto-stage and push project changes to GitHub. |
+| **`python3 acc.py dev test`** | Tag and trigger a Test/RC release workflow. |
+| **`python3 acc.py dev release`** | Branch, tag stable, and trigger the official release. |
+| **`python3 acc.py dev benchmark`** | Run the token-per-second (TPS) performance suite. |
 
 ## 🛡️ Self-Healing & Secure Architecture
 acc is built like a production container orchestrator:
@@ -99,7 +96,7 @@ acc is built like a production container orchestrator:
 ## 🧪 Reliability & Testing
 acc maintains high stability through a multi-layered testing strategy:
 - **Protocol Integrity**: Automated tests in `:common` verify that the JSON communication between Python workers, the Kotlin Gateway, and the Compose UI never breaks.
-- **Environment Audit**: The `./acc setup` command performs a pre-flight health check of your kernel, drivers, and toolchain.
+- **Environment Audit**: The `python3 acc.py setup` command performs a pre-flight health check of your toolchain.
 - **Visual Parity**: UI components are developed with Material 3 tokens to ensure consistent rendering across Wasm, Android, and Desktop.
 
 ---

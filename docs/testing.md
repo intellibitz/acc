@@ -25,7 +25,7 @@ python3 brain/system_bridge.py
 ```
 
 ## 🏗️ Hardware Audit
-The `./acc setup` command performs a universal audit:
+The `python3 acc.py setup` command performs a universal audit:
 - **Docker/Podman** availability.
 - **GPU Passthrough** capability (NVIDIA Container Toolkit or macOS virtualization).
 - **Network Routing** between the Gateway and AI engines.
