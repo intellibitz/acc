@@ -197,26 +197,29 @@ case "$1" in
             exit 1
         fi
 
-        log "WARNING: This will completely remove Acc and all AI models."
-        read -p "[PROMPT] Are you sure? (y/N) " -n 1 -r </dev/tty
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            log "Stopping infrastructure..."
-            [ -f "$PROJECT_ROOT/docker-compose.yml" ] && docker compose down -v 2>/dev/null
-            pkill -f "cc.thevar.acc" || true
+        FORCE=false
+        if [[ "$2" == "--force" ]]; then FORCE=true; fi
 
-            log "Reclaiming disk space..."
-            rm -rf "$PROJECT_ROOT"
-            rm -f "$HOME/.local/bin/acc"
-
-            if [ -f "/etc/sysctl.d/99-llm-hw.conf" ]; then
-                log "Removing hardware tweaks..."
-                sudo rm "/etc/sysctl.d/99-llm-hw.conf" && sudo sysctl -p /etc/sysctl.d/99-llm-hw.conf || true
-            fi
-            log "\033[1;32mSUCCESS!\033[0m Acc has been uninstalled."
-        else
-            log "Uninstallation aborted."
+        if [ "$FORCE" = false ]; then
+            log "WARNING: This will completely remove Acc and all AI models."
+            read -p "[PROMPT] Are you sure? (y/N) " -n 1 -r </dev/tty
+            echo
+            [[ ! $REPLY =~ ^[Yy]$ ]] && { log "Uninstallation aborted."; exit 0; }
         fi
+
+        log "Stopping infrastructure..."
+        [ -f "$PROJECT_ROOT/docker-compose.yml" ] && docker compose down -v 2>/dev/null
+        pkill -f "cc.thevar.acc" || true
+
+        log "Reclaiming disk space..."
+        rm -rf "$PROJECT_ROOT"
+        rm -f "$HOME/.local/bin/acc"
+
+        if [ -f "/etc/sysctl.d/99-llm-hw.conf" ]; then
+            log "Removing hardware tweaks..."
+            sudo rm "/etc/sysctl.d/99-llm-hw.conf" && sudo sysctl -p /etc/sysctl.d/99-llm-hw.conf || true
+        fi
+        log "\033[1;32mSUCCESS!\033[0m Acc has been uninstalled."
         ;;
     add)
         # Usage: acc add "provider|name|repo|filePattern|tier|quant|superpower" [--private]

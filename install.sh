@@ -26,7 +26,7 @@ if [ -d "$INSTALL_DIR" ]; then
     if [[ $REPLY == "2" ]]; then
         log "Performing clean-up before installation..."
         if [ -x "$INSTALL_DIR/acc" ]; then
-            "$INSTALL_DIR/acc" uninstall || rm -rf "$INSTALL_DIR"
+            "$INSTALL_DIR/acc" uninstall --force || rm -rf "$INSTALL_DIR"
         else
             rm -rf "$INSTALL_DIR"
         fi
