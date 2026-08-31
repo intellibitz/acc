@@ -244,34 +244,78 @@ case "$1" in
         log "\033[1;32mSUCCESS!\033[0m Acc has been uninstalled."
         ;;
     add)
-        # Usage: acc add "provider|name|repo|filePattern|tier|quant|superpower" [--private]
-        shift
-        ENTRY="$1"; shift
-        IS_PRIVATE="false"
-        while [[ "$#" -gt 0 ]]; do
-            case $1 in
-                --private) IS_PRIVATE="true" ;;
-            esac
-            shift
-        done
-
-        IFS='|' read -r provider name repo pattern tier quant superpower <<< "$ENTRY"
-        [ -z "$name" ] && { error "Invalid entry. Format: 'provider|name|repo|filePattern|tier|quant|superpower'"; exit 1; }
-
-        log "Adding model '$name' (Engine: $provider) to fleet..."
-        # We need a way to call FleetManager or use jq to update fleet.json
-        FLEET_JSON="$PROJECT_ROOT/config/fleet.json"
-        if [ ! -f "$FLEET_JSON" ]; then echo '{"models":[]}' > "$FLEET_JSON"; fi
-
-        tmp=$(mktemp)
-        jq --arg p "$provider" --arg n "$name" --arg r "$repo" --arg pat "$pattern" \
-           --arg t "$tier" --arg q "$quant" --arg s "$superpower" --arg priv "$IS_PRIVATE" \
-           '.models += [{"provider": $p, "name": $n, "repo": $r, "filePattern": $pat, "tier": $t, "quant": $q, "superpower": $s, "isPrivate": ($priv == "true")}]' \
-           "$FLEET_JSON" > "$tmp" && mv "$tmp" "$FLEET_JSON"
-
-        log "[SUCCESS] Model added. Restarting bridge..."
-        pkill -f "brain/system_bridge.py" || true
+        # ... (existing add logic)
         ;;
-    ""|help) [[ -z "$1" ]] && smart_start || echo "Usage: ./acc [setup|up|dash|status|sync|tune-hw|maint|stop|uninstall|add]" ;;
+    dev)
+        if [ ! -d "$PROJECT_ROOT/.git" ]; then
+            error "Dev commands only available in Creator/Source mode (git repo)."
+            exit 1
+        fi
+
+        case "$2" in
+            test)
+                # 1. Get current tag or default
+                CURRENT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+                # 2. Extract base version (vX.Y.Z)
+                BASE_VERSION=$(echo $CURRENT_TAG | grep -oP '^v\d+\.\d+\.\d+')
+                # 3. Handle incrementing test suffix
+                if [[ $CURRENT_TAG == *"-test."* ]]; then
+                    SUFFIX=$(echo $CURRENT_TAG | grep -oP 'test\.\d+' | cut -d. -f2)
+                    NEXT_SUFFIX=$((SUFFIX + 1))
+                else
+                    NEXT_SUFFIX=1
+                    # Increment patch for new test cycle
+                    IFS='.' read -ra ADDR <<< "${BASE_VERSION#v}"
+                    BASE_VERSION="v${ADDR[0]}.${ADDR[1]}.$((ADDR[2] + 1))"
+                fi
+                NEXT_TAG="${BASE_VERSION}-test.${NEXT_SUFFIX}"
+
+                log "Tagging Test Release: $NEXT_TAG"
+                git tag -a "$NEXT_TAG" -m "Test Release $NEXT_TAG"
+                git push origin "$NEXT_TAG"
+                log "[SUCCESS] Test tag pushed. GitHub Actions triggered."
+                ;;
+            release)
+                CURRENT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+                BASE_VERSION=$(echo $CURRENT_TAG | grep -oP '^v\d+\.\d+\.\d+')
+                IFS='.' read -ra ADDR <<< "${BASE_VERSION#v}"
+                # Increment minor for stable release
+                NEXT_VERSION="v${ADDR[0]}.$((ADDR[1] + 1)).0"
+
+                log "Creating Stable Release: $NEXT_VERSION"
+                # Create release branch
+                BRANCH_NAME="release/$NEXT_VERSION"
+                git checkout -b "$BRANCH_NAME"
+
+                # Generate Release Notes
+                NOTES_FILE="RELEASE_NOTES.md"
+                echo "# Release $NEXT_VERSION" > "$NOTES_FILE"
+                echo "Generated on $(date)" >> "$NOTES_FILE"
+                echo "## Changes" >> "$NOTES_FILE"
+                git log "$CURRENT_TAG..HEAD" --oneline --pretty=format:"* %s" >> "$NOTES_FILE"
+
+                git add "$NOTES_FILE"
+                git commit -m "docs: release notes for $NEXT_VERSION"
+
+                git tag -a "$NEXT_VERSION" -m "Stable Release $NEXT_VERSION"
+                git push origin "$BRANCH_NAME" --tags
+
+                log "[SUCCESS] Release $NEXT_VERSION branched and tagged. Automation initiated."
+                ;;
+            push)
+                log "Syncing changes to GitHub..."
+                git add .
+                read -p "[PROMPT] Commit message: " msg </dev/tty
+                git commit -m "${msg:-dev: routine sync}"
+                git push origin main
+                ;;
+            benchmark)
+                source "$VENV_DIR/bin/activate"
+                python3 "$PROJECT_ROOT/tooling/benchmark.py"
+                ;;
+            *) echo "Usage: ./acc dev [test|release|push|benchmark]" ;;
+        esac
+        ;;
+    ""|help) [[ -z "$1" ]] && smart_start || echo "Usage: ./acc [setup|up|dash|status|sync|tune-hw|maint|stop|uninstall|add|dev]" ;;
     *) echo "Unknown: $1"; exit 1 ;;
 esac

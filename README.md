@@ -88,6 +88,8 @@ The `acc` script acts as a smart dispatcher for your workstation:
 | Command | Action |
 | :--- | :--- |
 | **`./acc dev push`** | Auto-stage and push project changes to GitHub. |
+| **`./acc dev test`** | Tag and trigger a Test/RC release workflow. |
+| **`./acc dev release`** | Branch, tag stable, and trigger the official release. |
 | **`./acc dev benchmark`** | Run the token-per-second (TPS) performance suite. |
 
 ## 🛡️ Self-Healing & Secure Architecture
@@ -117,6 +119,11 @@ acc maintains high stability through a multi-layered testing strategy:
 
 ## 🤝 Contributing
 acc is built for the community. If you have ideas for better orchestration or new model superpowers, check out our [CONTRIBUTING.md](CONTRIBUTING.md).
+
+### 🛠️ Creator Workflow
+1.  Verify changes: `docker compose build acc-gateway`
+2.  Tag release: `git tag vX.Y.Z && git push --tags`
+3.  Automation handles the rest!
 
 ## 🛡️ License
 Distributed under the MIT License. See `LICENSE` for more information.

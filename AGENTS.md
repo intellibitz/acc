@@ -19,15 +19,23 @@ Acc implements a "True Zero-Effort" universal bootstrapper.
 - **Multi-Engine Fleet**: Users can add any AI agent/engine/model (Ollama, OpenAI, Anthropic, Gemini, etc.) via the `acc add` command, which updates the unified `fleet.json` configuration.
 - **VENV-Aware**: Supervisor detects local `.venv` for legacy host execution support.
 
+## 🛠️ The Creator Workflow (Zero-Effort CI/CD)
+To keep the "Zero-Effort" promise to Normal Users, we use a fully automated release pipeline.
+1.  **Develop**: Make changes in a feature branch.
+2.  **Verify**: Run `docker compose build acc-gateway` and verify in a standalone test directory.
+3.  **Test**: Run `./acc dev test` to auto-increment the RC tag and trigger CI verification.
+4.  **Release**: Run `./acc dev release` to branch, tag stable, and publish official artifacts.
+5.  **Automation**: GitHub Actions (`release.yml`) will:
+    - Build Multi-Platform Docker images (AMD64 & ARM64).
+    - Push images to `intellibitz/acc-gateway`.
+    - Create a GitHub Release with the latest `acc` script and `docker-compose.yml`.
+
 ## 🧪 Ongoing Missions
-- [x] Implement unit tests for the `CommandHandler` logic in `gateway`.
-- [x] Move `ProvisioningService` into a more robust state-machine model in Kotlin.
-- [x] Implement real-time GPU memory tracking using the `nvidia-smi` bridge more efficiently.
-- [x] Implement "True Zero-Effort" resilient bootstrapper and `.venv` management.
 - [x] Pivot to **Container-First** architecture and **Universal macOS support**.
 - [x] Implement integrated `acc uninstall` for total system restoration.
 - [x] Implement **On-Demand Agent Spawning** for Multi-Engine fleets (Local & Cloud).
 - [x] Refactor into **AI-Neutral Folder Structure** (`registry/`, `.cache/`).
+- [x] Implement **Automated Release Pipeline** via GitHub Actions.
 - [ ] Implement integrated E2E journey tests for the Provisioning flow.
 
 See [docs/testing.md](docs/testing.md) for verification commands.
