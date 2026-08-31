@@ -71,6 +71,7 @@ The `acc` script acts as a smart dispatcher for your workstation:
 | **`./acc update`** | One-click upgrade: syncs code, runs setup, and restarts. |
 | **`./acc chat`** | Launch an interactive session with any model. |
 | **`./acc stop`** | Gracefully shutdown all services and agents. |
+| **`./acc uninstall`** | Completely remove Acc and reclaim all disk space. |
 
 ### 🔧 Maintenance (The Mechanic)
 | Command | Action |

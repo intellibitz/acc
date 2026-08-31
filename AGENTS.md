@@ -24,6 +24,7 @@ Acc implements a "True Zero-Effort" universal bootstrapper.
 - [x] Implement real-time GPU memory tracking using the `nvidia-smi` bridge more efficiently.
 - [x] Implement "True Zero-Effort" resilient bootstrapper and `.venv` management.
 - [x] Pivot to **Container-First** architecture and **Universal macOS support**.
+- [x] Implement integrated `acc uninstall` for total system restoration.
 - [ ] Implement integrated E2E journey tests for the Provisioning flow.
 
 See [docs/testing.md](docs/testing.md) for verification commands.

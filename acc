@@ -180,10 +180,32 @@ case "$1" in
         ;;
     stop)
         cleanup_dash
-        $OSM stop
+        [ -f "$PROJECT_ROOT/common/osm.sh" ] && $OSM stop
         pkill -f "cc.thevar.acc"
         log "System stopped."
         ;;
-    ""|help) [[ -z "$1" ]] && smart_start || echo "Usage: ./acc [setup|up|dash|status|sync|tune-hw|maint|stop]" ;;
+    uninstall)
+        log "WARNING: This will completely remove Acc and all AI models."
+        read -p "[PROMPT] Are you sure? (y/N) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            log "Stopping infrastructure..."
+            [ -f "$PROJECT_ROOT/docker-compose.yml" ] && docker compose down -v 2>/dev/null
+            pkill -f "cc.thevar.acc" || true
+
+            log "Reclaiming disk space..."
+            rm -rf "$PROJECT_ROOT"
+            rm -f "$HOME/.local/bin/acc"
+
+            if [ -f "/etc/sysctl.d/99-llm-hw.conf" ]; then
+                log "Removing hardware tweaks..."
+                sudo rm "/etc/sysctl.d/99-llm-hw.conf" && sudo sysctl -p /etc/sysctl.d/99-llm-hw.conf || true
+            fi
+            log "\033[1;32mSUCCESS!\033[0m Acc has been uninstalled."
+        else
+            log "Uninstallation aborted."
+        fi
+        ;;
+    ""|help) [[ -z "$1" ]] && smart_start || echo "Usage: ./acc [setup|up|dash|status|sync|tune-hw|maint|stop|uninstall]" ;;
     *) echo "Unknown: $1"; exit 1 ;;
 esac
