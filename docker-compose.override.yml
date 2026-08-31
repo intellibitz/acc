@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  acc-gateway:
+    volumes:
+      - .:/app # Mount source for hot-reloading bridge logic
+    environment:
+      - DEBUG=true
+
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

@@ -18,17 +18,23 @@ error() { echo -e "[\033[1;31merror\033[0m] $1"; }
 ensure_system_deps() {
     log "Auditing system dependencies..."
     local missing=()
-    for cmd in tmux jq ollama java curl keytool; do
+    for cmd in docker jq curl; do
         if ! command -v $cmd &> /dev/null; then missing+=("$cmd"); fi
     done
 
     if [ ${#missing[@]} -gt 0 ]; then
         log "Missing tools: [${missing[*]}]. Attempting auto-install..."
-        if command -v apt-get &> /dev/null; then
-            sudo apt-get update -qq
-            sudo apt-get install -y tmux jq openjdk-21-jdk curl
+        if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+            if command -v apt-get &> /dev/null; then
+                sudo apt-get update -qq && sudo apt-get install -y docker.io jq curl
+            fi
+        elif [[ "$OSTYPE" == "darwin"* ]]; then
+            if command -v brew &> /dev/null; then
+                brew install jq curl
+                log "Please install Docker Desktop for Mac: https://www.docker.com/products/docker-desktop"
+            fi
         else
-            error "Automatic installation only supported on Debian/Ubuntu. Please install manually: [${missing[*]}]"
+            error "Automatic installation not supported on $OSTYPE. Please install manually: [${missing[*]}]"
             exit 1
         fi
     fi
@@ -86,17 +92,21 @@ open_url() {
 
 smart_start() {
     if curl -sk http://localhost:8333/health > /dev/null; then
-        log "Acc Manager is active."
+        log "Acc Cockpit is active."
         open_url "http://localhost:8333"
         return
     fi
 
-    ensure_system_deps
-    ensure_python_env
-    cleanup_dash
-
-    log "Launching AI Command Center..."
-    nohup bash "$PROJECT_ROOT/acc" gui > /dev/null 2>&1 &
+    if command -v docker-compose &> /dev/null || docker compose version &> /dev/null; then
+        log "Launching via Docker (Zero-Effort Integrity)..."
+        docker compose up -d
+    else
+        log "Docker not found. Falling back to local host execution..."
+        ensure_system_deps
+        ensure_python_env
+        cleanup_dash
+        nohup bash "$PROJECT_ROOT/acc" gui > /dev/null 2>&1 &
+    fi
 
     (
         timeout=60
@@ -109,7 +119,7 @@ smart_start() {
             sleep 2
             ((timeout--))
         done
-        error "Manager failed to start. See logs/gateway.log"
+        error "Manager failed to start. Check docker logs or logs/gateway.log"
     ) &
 }
 

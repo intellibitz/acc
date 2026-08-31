@@ -11,12 +11,24 @@ To run:
 ./gradlew :common:jvmTest
 ```
 
+## 🐳 Container & Deployment Verification
+With the pivot to a container-first architecture, ensure the production image builds correctly:
+
+```bash
+docker compose build acc-gateway
+```
+
+Verify the bridge's platform-aware logic:
+```bash
+# Within the container
+python3 brain/system_bridge.py
+```
+
 ## 🏗️ Hardware Audit
-The `./acc setup` command runs an environment-native audit script that verifies:
-- NVIDIA Driver versions.
-- CUDA availability.
-- Docker daemon status.
-- Python dependency integrity.
+The `./acc setup` command performs a universal audit:
+- **Docker/Podman** availability.
+- **GPU Passthrough** capability (NVIDIA Container Toolkit or macOS virtualization).
+- **Network Routing** between the Gateway and AI engines.
 
 ## 🎨 Visual Parity
 UI components are tested via Compose Previews and manual verification across:

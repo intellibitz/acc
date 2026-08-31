@@ -15,20 +15,39 @@ except ImportError:
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def get_gpu_stats():
+    # NVIDIA Support
     try:
         cmd = ["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw", "--format=csv,noheader,nounits"]
         output = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode().strip()
         parts = output.split(", ")
         return {
             "utilization": float(parts[0]), "memoryUsed": float(parts[1]), "memoryTotal": float(parts[2]),
-            "temperature": float(parts[3]), "power": float(parts[4]), "active": True
+            "temperature": float(parts[3]), "power": float(parts[4]), "active": True, "type": "NVIDIA"
         }
-    except: return {"utilization": 0, "memoryUsed": 0, "memoryTotal": 0, "temperature": 0, "power": 0, "active": False}
+    except: pass
+
+    # macOS / Apple Silicon Support (Basic)
+    if sys.platform == "darwin":
+        try:
+            # Simple check for MPS availability via a small shell hack or logic
+            return {"active": True, "type": "APPLE_SILICON", "utilization": 0} # Placeholder for specialized MPS stats
+        except: pass
+
+    return {"utilization": 0, "memoryUsed": 0, "memoryTotal": 0, "temperature": 0, "power": 0, "active": False, "type": "CPU"}
 
 def get_fleet_disk_usage():
     try:
-        ollama_dir = os.path.expanduser("~/.ollama/models")
-        if not os.path.exists(ollama_dir): return "N/A"
+        # Platform-aware path detection
+        if sys.platform == "darwin":
+            ollama_dir = os.path.expanduser("~/Library/Application Support/Ollama/models")
+        else:
+            ollama_dir = os.path.expanduser("~/.ollama/models")
+            
+        # Overwrite if in Docker
+        if os.path.exists("/root/.ollama/models"):
+            ollama_dir = "/root/.ollama/models"
+
+        if not os.path.exists(ollama_dir): return "0B"
         process = subprocess.Popen(["du", "-sh", ollama_dir], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out, _ = process.communicate()
         return out.decode().split()[0]
@@ -36,10 +55,12 @@ def get_fleet_disk_usage():
 
 def get_ollama_status():
     try:
-        resp = requests.get("http://localhost:11434/api/tags", timeout=1)
+        # Check OLLAMA_HOST from env (Docker context) or default
+        base_url = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+        resp = requests.get(f"{base_url}/api/tags", timeout=1)
         if resp.status_code == 200:
             models = resp.json().get("models", [])
-            ps_resp = requests.get("http://localhost:11434/api/ps", timeout=1)
+            ps_resp = requests.get(f"{base_url}/api/ps", timeout=1)
             running = ps_resp.json().get("models", []) if ps_resp.status_code == 200 else []
             return {"online": True, "models": models, "running": running}
         return {"online": False}

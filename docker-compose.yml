@@ -1,21 +1,28 @@
 version: '3.8'
 
 services:
-  local-ai:
-    image: localai/localai:latest-gpu-nvidia # Or latest for CPU
-    container_name: local-ai
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8333/readyz"]
-      interval: 1m
-      timeout: 10s
-      retries: 3
+  acc-gateway:
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
+    container_name: acc-gateway
     ports:
       - "8333:8333"
     environment:
-      - MODELS_PATH=/models
-      - DEBUG=true
+      - OLLAMA_HOST=http://ollama:11434
     volumes:
-      - ./Data/LocalAI/models:/models
+      - ./config:/app/config
+      - ./logs:/app/logs
+    depends_on:
+      - ollama
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: acc-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
     deploy:
       resources:
         reservations:
@@ -23,3 +30,6 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+
+volumes:
+  ollama_data:
