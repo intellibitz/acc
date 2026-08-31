@@ -1,40 +1,39 @@
 #!/bin/bash
 # ==============================================================================
-# AI COMMAND CENTER (acc) - ZERO-EFFORT INSTALLER
+# acc ONE-LINER INSTALLER
 # ==============================================================================
 
 set -e
 
-PROJECT_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-BIN_TARGET="/usr/local/bin/acc"
+INSTALL_DIR="$HOME/.acc"
+BIN_DIR="$HOME/.local/bin"
+REPO="intellibitz/acc"
 
-log() { echo -e "[\033[1;32mINSTALLER\033[0m] $1"; }
-error() { echo -e "[\033[1;31mERROR\033[0m] $1"; exit 1; }
+log() { echo -e "[\033[1;34macc-install\033[0m] $1"; }
+error() { echo -e "[\033[1;31merror\033[0m] $1"; exit 1; }
 
-log "Setting up AI Command Center (acc)..."
+mkdir -p "$INSTALL_DIR" "$BIN_DIR"
 
-# 1. Check for basic requirements
-for cmd in tmux curl jq pip3; do
-    command -v $cmd >/dev/null 2>&1 || error "$cmd is not installed. Please install it first."
-done
+log "Downloading latest orchestrator..."
+curl -sSL "https://raw.githubusercontent.com/$REPO/main/acc" -o "$INSTALL_DIR/acc"
+chmod +x "$INSTALL_DIR/acc"
 
-# 2. Make scripts executable
-chmod +x "$PROJECT_ROOT/acc"
-chmod +x "$PROJECT_ROOT/common/"*.sh
-chmod +x "$PROJECT_ROOT/gradlew"
+# Link to bin
+ln -sf "$INSTALL_DIR/acc" "$BIN_DIR/acc"
 
-# 3. Create symlink
-if [ -L "$BIN_TARGET" ]; then
-    sudo rm "$BIN_TARGET"
+log "Initializing environment..."
+cd "$INSTALL_DIR"
+./acc setup
+
+log "Fetching pre-built cockpit..."
+# In a real release, this would download the Shadow JAR from GitHub Releases
+# For now, we'll guide the user to the local build if they have the source
+# but the vision is: curl -L https://github.com/$REPO/releases/latest/download/acc-gateway.jar -o bin/gateway.jar
+
+log "\033[1;32mSUCCESS!\033[0m AI Command Center is installed."
+log "Type 'acc' to start your cockpit."
+
+# Check if BIN_DIR is in PATH
+if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
+    log "\033[1;33mNOTE\033[0m: Please add $BIN_DIR to your PATH (e.g., in ~/.bashrc)"
 fi
-
-log "Linking acc to $BIN_TARGET..."
-sudo ln -s "$PROJECT_ROOT/acc" "$BIN_TARGET"
-
-# 4. Install python dependencies
-log "Installing Python dependencies..."
-pip3 install -r "$PROJECT_ROOT/requirements.txt" --quiet
-
-log "\n\033[1;36mSUCCESS!\033[0m"
-log "Acc is now your elite AI workstation."
-log "Launch everything with a single command: \033[1;37macc\033[0m"

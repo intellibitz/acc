@@ -129,14 +129,20 @@ case "$1" in
         ;;
     gui)
         export NODE_OPTIONS="--no-deprecation"
-        # Start the build in background if missing
-        if [ ! -d "frontend/web/build/dist/wasmJs/productionExecutable" ]; then
-            log "Triggering background frontend build..."
-            nohup ./gradlew :frontend:web:wasmJsBrowserDistribution --quiet > logs/build.log 2>&1 &
-        fi
-
         source "$VENV_DIR/bin/activate"
-        ./gradlew :gateway:run --no-daemon > "$PROJECT_ROOT/logs/gateway.log" 2>&1
+
+        # Check for pre-built JAR (Installed Mode)
+        if [ -f "$PROJECT_ROOT/bin/acc-gateway.jar" ]; then
+            log "Starting pre-built cockpit..."
+            java -jar "$PROJECT_ROOT/bin/acc-gateway.jar" > "$PROJECT_ROOT/logs/gateway.log" 2>&1
+        else
+            # Source Mode: Start the build in background if missing
+            if [ ! -d "frontend/web/build/dist/wasmJs/productionExecutable" ]; then
+                log "Triggering background frontend build..."
+                nohup ./gradlew :frontend:web:wasmJsBrowserDistribution --quiet > logs/build.log 2>&1 &
+            fi
+            ./gradlew :gateway:run --no-daemon > "$PROJECT_ROOT/logs/gateway.log" 2>&1
+        fi
         ;;
     stop)
         cleanup_dash

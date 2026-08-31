@@ -10,6 +10,16 @@ application {
     mainClass.set("cc.thevar.acc.ApplicationKt")
 }
 
+tasks.register<Copy>("copyWasmFrontend") {
+    dependsOn(":frontend:web:wasmJsBrowserDistribution")
+    from(project(":frontend:web").layout.buildDirectory.dir("dist/wasmJs/productionExecutable"))
+    into(project.layout.buildDirectory.dir("resources/main/static"))
+}
+
+tasks.processResources {
+    dependsOn("copyWasmFrontend")
+}
+
 dependencies {
     api(project(":common"))
     implementation(libs.logback)

@@ -1,0 +1,37 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Build Gateway with Embedded Frontend
+        run: ./gradlew :gateway:assemble # Standard assemble includes copyWasmFrontend now
+        
+      - name: Create Fat JAR
+        # Since Shadow plugin had issues, we'll use standard jar or manual bundling for now
+        # Ideally we'd fix Shadow, but for the one-liner vision:
+        run: ./gradlew :gateway:installDist 
+
+      - name: Upload Release Artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            gateway/build/libs/gateway-1.0.0.jar
+            acc
+            install.sh

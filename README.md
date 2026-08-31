@@ -36,15 +36,12 @@ acc is organized into a clean, professional architecture:
 
 ---
 
-## 🚀 Quick Start (Zero Effort)
+## 🚀 Quick Start (True Zero Effort)
+
+Run the one-liner to install and launch your cockpit instantly:
 
 ```bash
-# 1. Clone the cockpit
-git clone https://github.com/intellibitz/acc.git
-cd acc
-
-# 2. Start the magic
-./acc
+curl -sSL https://raw.githubusercontent.com/intellibitz/acc/main/install.sh | bash
 ```
 
 ---

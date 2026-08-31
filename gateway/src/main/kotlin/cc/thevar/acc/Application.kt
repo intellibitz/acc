@@ -24,13 +24,21 @@ import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration.Companion.seconds
 
-// Robust project root detection
+// Robust project root detection for source and standalone modes
 private fun findProjectRoot(): File {
+    val envRoot = System.getenv("ACC_ROOT")?.let { File(it) }
+    if (envRoot != null && envRoot.exists()) return envRoot
+
     val userDir = System.getProperty("user.dir")?.let { File(it) } ?: File(".")
     var current: File? = userDir.absoluteFile
     
     while (current != null) {
+        // Source mode indicators
         if (File(current, "acc").exists() && File(current, "settings.gradle.kts").exists()) {
+            return current
+        }
+        // Standalone mode indicators (installed via install.sh)
+        if (File(current, "acc").exists() && File(current, "config").exists() && File(current, "data").exists()) {
             return current
         }
         current = current.parentFile
@@ -244,6 +252,14 @@ fun Application.module() {
         val staticDir = File(projectRoot, "frontend/web/build/dist/wasmJs/productionExecutable")
         
         get("/") {
+            // Priority 1: Check classpath resources (bundled mode)
+            val resource = this::class.java.classLoader.getResource("static/index.html")
+            if (resource != null) {
+                call.respondText(resource.readBytes().toString(Charsets.UTF_8), ContentType.Text.Html)
+                return@get
+            }
+
+            // Priority 2: Check disk (dev mode)
             val indexFile = File(staticDir, "index.html")
             if (indexFile.exists()) {
                 call.respondFile(indexFile)
@@ -280,6 +296,20 @@ fun Application.module() {
                 
                 if (builder == null || builder.status == WorkerStatus.STOPPED) {
                     supervisorService.startWorker("FRONTEND_BUILDER")
+                }
+            }
+        }
+
+        // Static resource handling
+        staticResources("/", "static") {
+            contentType { file ->
+                val name = file.path.lowercase()
+                when {
+                    name.endsWith(".wasm") -> ContentType.Application.Wasm
+                    name.endsWith(".js") -> ContentType.Application.JavaScript
+                    name.endsWith(".css") -> ContentType.Text.CSS
+                    name.endsWith(".html") -> ContentType.Text.Html
+                    else -> null
                 }
             }
         }
