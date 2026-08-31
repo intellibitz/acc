@@ -24,6 +24,7 @@ data class SystemStats(
 @Serializable
 data class ModelStatus(
     val name: String,
+    val provider: String = "ollama",
     val isInstalled: Boolean,
     val isRunning: Boolean,
     val type: String // "PRIV" or "COMM"

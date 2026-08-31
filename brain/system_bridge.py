@@ -69,17 +69,19 @@ def get_ollama_status():
 def get_fleet_config():
     fleet_json_path = os.path.join(PROJECT_ROOT, "config/fleet.json")
     managed = []
-    private = []
     
     if os.path.exists(fleet_json_path):
         try:
             with open(fleet_json_path, 'r') as f:
                 data = json.load(f)
                 for m in data.get("models", []):
-                    if m.get("isPrivate"): private.append(m["name"])
-                    else: managed.append(m["name"])
+                    managed.append({
+                        "name": m["name"],
+                        "provider": m.get("provider", "ollama"),
+                        "isPrivate": m.get("isPrivate", False)
+                    })
         except: pass
-    return managed, private
+    return managed
 
 def get_system_state():
     if psutil is None:
@@ -91,21 +93,41 @@ def get_system_state():
     disk = get_fleet_disk_usage()
     
     ollama = get_ollama_status()
-    managed, private = get_fleet_config()
+    managed_models = get_fleet_config()
     
     fleet = []
-    if ollama.get("online"):
-        installed_names = [m["name"].split(":")[0] for m in ollama["models"]]
-        running_names = [r["name"].split(":")[0] for r in ollama["running"]]
-        all_m = list(set(managed + private + installed_names))
-        all_m.sort()
+    installed_ollama_names = [m["name"].split(":")[0] for m in ollama.get("models", [])] if ollama.get("online") else []
+    running_ollama_names = [r["name"].split(":")[0] for r in ollama.get("running", [])] if ollama.get("online") else []
+
+    # Map managed models first
+    for m in managed_models:
+        is_installed = False
+        is_running = False
         
-        for name in all_m:
+        if m["provider"] == "ollama":
+            is_installed = m["name"] in installed_ollama_names
+            is_running = m["name"] in running_ollama_names
+        elif m["provider"] in ["openai", "anthropic", "gemini"]:
+            is_installed = True # Cloud is always "installed"
+            is_running = True # Assume online for now
+            
+        fleet.append({
+            "name": m["name"],
+            "provider": m["provider"],
+            "isInstalled": is_installed,
+            "isRunning": is_running,
+            "type": "PRIV" if m["isPrivate"] else "COMM"
+        })
+
+    # Add any rogue ollama models not in fleet.json
+    for inst in installed_ollama_names:
+        if not any(f["name"] == inst for f in fleet):
             fleet.append({
-                "name": name,
-                "isInstalled": name in installed_names,
-                "isRunning": name in running_names,
-                "type": "PRIV" if name in private else "COMM"
+                "name": inst,
+                "provider": "ollama",
+                "isInstalled": True,
+                "isRunning": inst in running_ollama_names,
+                "type": "COMM"
             })
 
     return {

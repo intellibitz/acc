@@ -18,7 +18,8 @@ acc is designed for the developer who wants to *use* AI, not fight with dependen
 - **Tool Visualization**: Transparently monitor tool calls (shell commands, file edits) in a terminal-style interface.
 - **Master Orchestrator**: Just type `acc` to start. Docker-first for zero host pollution.
 - **Visual Dashboard**: Real-time TUI tracking CPU, RAM, and hardware metrics (NVIDIA CUDA / Apple Silicon).
-- **Backend Agnostic**: Native support for **Ollama**, **LocalAI**, and **vLLM** via LiteLLM abstraction.
+- **Backend Agnostic**: Native support for **Ollama**, **LocalAI**, and **vLLM**, plus integration with cloud providers like **OpenAI**, **Anthropic**, and **Gemini**.
+- **Multi-Engine Fleet**: Mix and match local and cloud models in a unified interface.
 - **Private Fleet**: Separate your paid/private models using the git-ignored `config/private_fleet.conf`.
 - **Smart Provisioning**: Resilient multi-connection downloads via official **HF-CLI**.
 - **Elite Tuning**: Automated kernel and driver optimization for maximum performance.

@@ -50,8 +50,19 @@ class SupervisorService(private val projectRoot: File) {
         }
     }
 
-    private fun registerWorker(name: String, command: List<String>, restartPolicy: Boolean) {
-        workers[name] = ManagedWorker(name, command, restartPolicy)
+    fun registerWorker(name: String, command: List<String>, restartPolicy: Boolean, env: Map<String, String> = emptyMap()) {
+        workers[name] = ManagedWorker(name, command, restartPolicy, env)
+    }
+
+    fun spawnAgent(agentName: String, model: String, apiBase: String? = null) {
+        val venvPython = File(projectRoot, ".venv/bin/python3").absolutePath
+        val pythonCmd = if (File(venvPython).exists()) venvPython else "python3"
+        
+        val env = mutableMapOf("ACC_MODEL" to model)
+        if (apiBase != null) env["ACC_API_BASE"] = apiBase
+        
+        registerWorker("AGENT_$agentName", listOf(pythonCmd, "brain/agent_bridge.py"), restartPolicy = true, env = env)
+        startWorker("AGENT_$agentName")
     }
 
     fun startWorker(name: String) {
@@ -78,7 +89,8 @@ class SupervisorService(private val projectRoot: File) {
     private inner class ManagedWorker(
         val name: String,
         val command: List<String>,
-        val restartPolicy: Boolean
+        val restartPolicy: Boolean,
+        val env: Map<String, String> = emptyMap()
     ) {
         private var process: Process? = null
         var status = WorkerStatus.STOPPED
@@ -95,6 +107,7 @@ class SupervisorService(private val projectRoot: File) {
             
             try {
                 val pb = ProcessBuilder(command).directory(projectRoot).redirectErrorStream(true)
+                pb.environment().putAll(env)
                 process = pb.start()
                 status = WorkerStatus.RUNNING
                 

@@ -14,14 +14,13 @@ DL_METHOD="hf"
 
 log() { local msg="[$(date +'%Y-%m-%d %H:%M:%S')] $1"; echo -e "$msg" | tee -a "$LOG_FILE"; }
 
-FLEET_CONF="$PROJECT_ROOT/config/fleet.conf"
-PRIVATE_FLEET_CONF="$PROJECT_ROOT/config/private_fleet.conf"
+FLEET_JSON="$PROJECT_ROOT/config/fleet.json"
 
-if [ -f "$FLEET_CONF" ]; then source "$FLEET_CONF"; else MODELS=(); fi
-if [ -f "$PRIVATE_FLEET_CONF" ]; then source "$PRIVATE_FLEET_CONF"; fi
-
-# Merge fleets for orchestration
-ALL_MODELS=("${MODELS[@]}" "${PRIVATE_MODELS[@]}")
+get_fleet_entries() {
+    if [ ! -f "$FLEET_JSON" ]; then echo "()"; return; fi
+    # Parse fleet.json using jq into the pipe-separated format provisioner expects
+    jq -r '.models[] | "\(.provider)|\(.name)|\(.repo)|\(.filePattern)|\(.tier)|\(.quant)|\(.superpower)|\(.isPrivate)"' "$FLEET_JSON"
+}
 
 OSM_CMD="bash $CORE_DIR/osm.sh"
 ARCHITECT_MANIFESTO="You are the Master Architect, an elite Android Lead Engineer."
@@ -215,13 +214,9 @@ tune_model() {
 
 provision_fleet() {
     local filter=$1
-    for entry in "${ALL_MODELS[@]}"; do
+    get_fleet_entries | while read -r entry; do
+        [ -z "$entry" ] && continue
         IFS='|' read -r provider name rest <<< "$(echo "$entry" | tr -d '\r')"
-        # If entry doesn't have provider, name is the first part
-        if [[ "$provider" != "ollama" && "$provider" != "localai" && "$provider" != "vllm" ]]; then
-            name=$provider
-        fi
-
         if [[ -n "$filter" ]]; then
             if [[ "$name" != "$filter" ]]; then continue; fi
         fi

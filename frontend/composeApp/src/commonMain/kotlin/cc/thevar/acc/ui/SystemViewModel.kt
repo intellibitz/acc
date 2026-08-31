@@ -59,4 +59,21 @@ class SystemViewModel : ViewModel() {
             }
         }
     }
+
+    fun spawnAgent(name: String, model: String) {
+        viewModelScope.launch {
+            try {
+                val host = "localhost"
+                val port = 8333
+                client.post("https://$host:$port/agent/spawn") {
+                    url {
+                        parameters.append("name", name)
+                        parameters.append("model", model)
+                    }
+                }
+            } catch (e: Exception) {
+                println("Agent spawn failed: ${e.message}")
+            }
+        }
+    }
 }

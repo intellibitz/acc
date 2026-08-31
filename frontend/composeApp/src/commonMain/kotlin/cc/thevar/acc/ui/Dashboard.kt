@@ -43,7 +43,7 @@ fun ThoughtStream(messages: List<AgentMessage>) {
 }
 
 @Composable
-fun SystemPanel(state: SystemState?, onCommand: (String) -> Unit) {
+fun SystemPanel(state: SystemState?, onCommand: (String) -> Unit, onSpawn: (String, String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("HARDWARE STATUS", style = MaterialTheme.typography.labelLarge, color = Color.Gray)
         
@@ -64,7 +64,7 @@ fun SystemPanel(state: SystemState?, onCommand: (String) -> Unit) {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(0.6f)) {
             state?.fleet?.let { fleet ->
                 items(fleet) { model ->
-                    FleetItem(model, onProvision = { onCommand("up $it") })
+                    FleetItem(model, onProvision = { onCommand("up $it") }, onSpawn = onSpawn)
                 }
             }
         }
@@ -101,16 +101,28 @@ fun StatItem(label: String, value: String, progress: Float) {
 }
 
 @Composable
-fun FleetItem(model: ModelStatus, onProvision: (String) -> Unit) {
+fun FleetItem(model: ModelStatus, onProvision: (String) -> Unit, onSpawn: (String, String) -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
     ) {
-        Box(modifier = Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(if (model.isRunning) Color.Green else Color.DarkGray))
+        Box(modifier = Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(
+            if (model.isRunning) Color.Green else if (model.isInstalled) Color.Cyan else Color.DarkGray
+        ))
         Spacer(modifier = Modifier.width(8.dp))
-        Text(model.name, fontSize = 12.sp, color = if (model.isInstalled) Color.White else Color.Gray, modifier = Modifier.weight(1f))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(model.name, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = if (model.isInstalled) Color.White else Color.Gray)
+            Text(model.provider.uppercase(), fontSize = 9.sp, color = Color.Gray)
+        }
         
-        if (!model.isInstalled) {
+        if (model.isInstalled) {
+            IconButton(
+                onClick = { onSpawn(model.name, "${model.provider}/${model.name}") },
+                modifier = Modifier.size(24.dp)
+            ) {
+                Icon(Icons.Default.PlayArrow, null, tint = Color.Cyan, modifier = Modifier.size(16.dp))
+            }
+        } else if (model.provider == "ollama") {
             IconButton(
                 onClick = { onProvision(model.name) },
                 modifier = Modifier.size(24.dp)

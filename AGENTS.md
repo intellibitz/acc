@@ -16,6 +16,7 @@ Acc follows a **Container-First** architecture.
 Acc implements a "True Zero-Effort" universal bootstrapper.
 - **Universal OS Support**: The `acc` script auto-detects macOS (Darwin) and Linux, managing dependencies via `brew` or `apt` where possible.
 - **Docker-First**: Infrastructure is orchestrated via `docker-compose.yml` with `docker-compose.override.yml` for local GPU passthrough.
+- **Multi-Engine Fleet**: Users can add any AI agent/engine/model (Ollama, OpenAI, Anthropic, Gemini, etc.) via the `acc add` command, which updates the unified `fleet.json` configuration.
 - **VENV-Aware**: Supervisor detects local `.venv` for legacy host execution support.
 
 ## 🧪 Ongoing Missions

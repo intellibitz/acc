@@ -31,14 +31,18 @@ private fun findProjectRoot(): File {
 
     val userDir = System.getProperty("user.dir")?.let { File(it) } ?: File(".")
     var current: File? = userDir.absoluteFile
-    
+
     while (current != null) {
         // Source mode indicators
         if (File(current, "acc").exists() && File(current, "settings.gradle.kts").exists()) {
             return current
         }
         // Standalone mode indicators (installed via install.sh)
-        if (File(current, "acc").exists() && File(current, "config").exists() && File(current, "data").exists()) {
+        if (File(current, "acc").exists() && File(current, "config").exists() && File(
+                current,
+                "data"
+            ).exists()
+        ) {
             return current
         }
         current = current.parentFile
@@ -52,19 +56,21 @@ val provisioningService = ProvisioningService(projectRoot, fleetManager)
 val supervisorService = SupervisorService(projectRoot)
 val commandHandler = CommandHandler(projectRoot, provisioningService)
 
-val uiSessions = Collections.newSetFromMap(ConcurrentHashMap<DefaultWebSocketServerSession, Boolean>())
-val systemSessions = Collections.newSetFromMap(ConcurrentHashMap<DefaultWebSocketServerSession, Boolean>())
+val uiSessions =
+    Collections.newSetFromMap(ConcurrentHashMap<DefaultWebSocketServerSession, Boolean>())
+val systemSessions =
+    Collections.newSetFromMap(ConcurrentHashMap<DefaultWebSocketServerSession, Boolean>())
 
 var systemStatusMsg = "Initializing Acc..."
 
 fun main() {
     println("[Manager] Starting from: ${System.getProperty("user.dir")}")
     println("[Manager] Detected Project Root: ${projectRoot.absolutePath}")
-    
+
     val keyStoreFile = File(projectRoot, "config/keystore.p12")
     val httpPort = 8333
     val httpsPort = 8334
-    
+
     val server = embeddedServer(Netty, configure = {
         connector {
             port = httpPort
@@ -72,7 +78,7 @@ fun main() {
         }
 
         if (keyStoreFile.exists()) {
-            val keyStorePassword = System.getenv("ACC_KEYSTORE_PASSWORD")?.toCharArray() 
+            val keyStorePassword = System.getenv("ACC_KEYSTORE_PASSWORD")?.toCharArray()
                 ?: "password".toCharArray()
             val keyStore = KeyStore.getInstance("PKCS12")
             keyStoreFile.inputStream().use { keyStore.load(it, keyStorePassword) }
@@ -104,15 +110,13 @@ fun Application.module() {
                     .directory(projectRoot)
                     .redirectErrorStream(true)
                     .start()
-                
+
                 process.inputStream.bufferedReader().useLines { lines ->
                     lines.forEach { line -> systemStatusMsg = line }
                 }
                 process.waitFor()
                 initSentinel.createNewFile()
-                systemStatusMsg = "Bootstrap complete."
-                delay(1000)
-                ProcessBuilder("./acc", "refresh").directory(projectRoot).start()
+                systemStatusMsg = "Acc Ready."
             } catch (e: Exception) {
                 systemStatusMsg = "Bootstrap Error: ${e.message}"
             }
@@ -138,9 +142,10 @@ fun Application.module() {
             try {
                 if (output.startsWith("{") && output.endsWith("}")) {
                     val bridgeData = Json.parseToJsonElement(output).jsonObject
-                    
+
                     if (bridgeData.containsKey("error")) {
-                        systemStatusMsg = bridgeData["error"]?.jsonPrimitive?.content ?: "Bridge Error"
+                        systemStatusMsg =
+                            bridgeData["error"]?.jsonPrimitive?.content ?: "Bridge Error"
                         return@collect
                     }
 
@@ -153,11 +158,16 @@ fun Application.module() {
                         provisioning = provisioningService.updates.value.values.toList(),
                         statusMsg = systemStatusMsg
                     )
-                    
+
                     val jsonFrame = Frame.Text(Json.encodeToString(fullState))
                     val sessions = systemSessions + uiSessions
                     sessions.forEach { session ->
-                        session.launch { try { session.send(jsonFrame) } catch (e: Exception) {} }
+                        session.launch {
+                            try {
+                                session.send(jsonFrame)
+                            } catch (e: Exception) {
+                            }
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -171,7 +181,12 @@ fun Application.module() {
         provisioningService.updates.collect { updates ->
             val updateFrame = Frame.Text(Json.encodeToString(updates.values.toList()))
             uiSessions.forEach { session ->
-                session.launch { try { session.send(updateFrame) } catch (e: Exception) {} }
+                session.launch {
+                    try {
+                        session.send(updateFrame)
+                    } catch (e: Exception) {
+                    }
+                }
             }
         }
     }
@@ -181,7 +196,12 @@ fun Application.module() {
         supervisorService.workerStates.collect { states ->
             val stateUpdate = Frame.Text(Json.encodeToString(states))
             uiSessions.forEach { session ->
-                session.launch { try { session.send(stateUpdate) } catch (e: Exception) {} }
+                session.launch {
+                    try {
+                        session.send(stateUpdate)
+                    } catch (e: Exception) {
+                    }
+                }
             }
         }
     }
@@ -189,7 +209,8 @@ fun Application.module() {
     routing {
         get("/health") {
             val states = supervisorService.workerStates.value
-            val isHealthy = states.all { it.status == WorkerStatus.RUNNING || it.status == WorkerStatus.COMPLETED || it.name == "FRONTEND_BUILDER"}
+            val isHealthy =
+                states.all { it.status == WorkerStatus.RUNNING || it.status == WorkerStatus.COMPLETED || it.name == "FRONTEND_BUILDER" }
             if (isHealthy) {
                 call.respondText("Acc Gateway is Online.")
             } else {
@@ -198,8 +219,19 @@ fun Application.module() {
         }
 
         post("/provisioning/up") {
-            provisioningService.provisionAll()
-            call.respondText("Provisioning started.")
+            val modelName = call.request.queryParameters["model"]
+            if (modelName != null) {
+                val model = fleetManager.getFleet().find { it.name == modelName }
+                if (model != null) {
+                    provisioningService.startProvisioning(model)
+                    call.respondText("Provisioning for $modelName started.")
+                } else {
+                    call.respond(HttpStatusCode.NotFound, "Model $modelName not found in fleet.")
+                }
+            } else {
+                provisioningService.provisionAll()
+                call.respondText("Global provisioning started.")
+            }
         }
 
         post("/system/update") {
@@ -210,9 +242,32 @@ fun Application.module() {
             call.respondText("Update sequence initiated.")
         }
 
-        webSocket("/ws/ui") { uiSessions.add(this); try { for (frame in incoming) { } } finally { uiSessions.remove(this) } }
-        webSocket("/ws/system") { systemSessions.add(this); try { for (frame in incoming) { } } finally { systemSessions.remove(this) } }
-        
+        post("/agent/spawn") {
+            val agentName = call.request.queryParameters["name"] ?: "Architect-${System.currentTimeMillis() % 1000}"
+            val model = call.request.queryParameters["model"] ?: "ollama/phi3"
+            val apiBase = call.request.queryParameters["apiBase"]
+            
+            supervisorService.spawnAgent(agentName, model, apiBase)
+            call.respondText("Agent $agentName spawned for model $model.")
+        }
+
+        webSocket("/ws/ui") {
+            uiSessions.add(this); try {
+            for (frame in incoming) {
+            }
+        } finally {
+            uiSessions.remove(this)
+        }
+        }
+        webSocket("/ws/system") {
+            systemSessions.add(this); try {
+            for (frame in incoming) {
+            }
+        } finally {
+            systemSessions.remove(this)
+        }
+        }
+
         webSocket("/ws/console") {
             try {
                 for (frame in incoming) {
@@ -233,10 +288,19 @@ fun Application.module() {
                 for (frame in incoming) {
                     if (frame is Frame.Text) {
                         val text = frame.readText()
-                        uiSessions.forEach { session -> session.launch { session.send(Frame.Text(text)) } }
+                        uiSessions.forEach { session ->
+                            session.launch {
+                                session.send(
+                                    Frame.Text(
+                                        text
+                                    )
+                                )
+                            }
+                        }
                     }
                 }
-            } finally { }
+            } finally {
+            }
         }
 
         webSocket("/ws/provisioning") {
@@ -246,16 +310,20 @@ fun Application.module() {
                         if (frame.readText() == "UP") provisioningService.provisionAll()
                     }
                 }
-            } finally { }
+            } finally {
+            }
         }
 
         val staticDir = File(projectRoot, "frontend/web/build/dist/wasmJs/productionExecutable")
-        
+
         get("/") {
             // Priority 1: Check classpath resources (bundled mode)
             val resource = this::class.java.classLoader.getResource("static/index.html")
             if (resource != null) {
-                call.respondText(resource.readBytes().toString(Charsets.UTF_8), ContentType.Text.Html)
+                call.respondText(
+                    resource.readBytes().toString(Charsets.UTF_8),
+                    ContentType.Text.Html
+                )
                 return@get
             }
 
@@ -266,7 +334,7 @@ fun Application.module() {
             } else {
                 val workerStates = supervisorService.workerStates.value
                 val builder = workerStates.find { it.name == "FRONTEND_BUILDER" }
-                
+
                 val bootstrapHtml = """
                     <!DOCTYPE html>
                     <html>
@@ -291,9 +359,9 @@ fun Application.module() {
                     </body>
                     </html>
                 """.trimIndent()
-                
+
                 call.respondText(bootstrapHtml, ContentType.Text.Html)
-                
+
                 if (builder == null || builder.status == WorkerStatus.STOPPED) {
                     supervisorService.startWorker("FRONTEND_BUILDER")
                 }
