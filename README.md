@@ -53,14 +53,12 @@ Once installed, just run `python3 acc.py` to start.
 
 ---
 
-## 🏗️ The "Zero-Effort" Workflow
-When you run `acc` for the first time:
-1.  **Instant Visuals**: The dashboard launches immediately in your browser.
-2.  **Automated Audit**: acc performs a full system audit, auto-installing missing tools (`tmux`, `jq`, `java`) and managing an isolated **Python .venv** automatically.
-3.  **Visual Bootstrapping**: Status updates are streamed directly to your screen while hardware tuning (via **HWT**) and background frontend builds occur.
-4.  **Elite Provisioning**: Models are downloaded to a hidden **`.cache/`** and registered into the **`registry/`** using hardware-aware logic within the Kotlin Gateway.
-5.  **Persistent Monitoring**: High-efficiency hardware tracking via a persistent JSON stream bridge with integrated health diagnostics.
-6.  **Unified Control**: Control everything—provision models, tune hardware, and watch agent thought streams—directly from the dashboard.
+## 🏗️ The "Zero-Footprint" Architecture
+Acc is designed to leave **no traces** on your system:
+1.  **Pure Docker**: The entire cockpit runs in a single container.
+2.  **No Host Dependencies**: You don't need Python, Java, or Node installed on your workstation.
+3.  **Engine Management**: The cockpit manages its own AI engines (Ollama, vLLM) via the Docker socket.
+4.  **Ephemeral Registry**: Local model manifests and parameters are stored in Docker volumes.
 
 ## 🛠️ Orchestrator Commands
 The `acc` script acts as a smart dispatcher for your workstation:

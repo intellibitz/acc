@@ -29,8 +29,9 @@ RUN apt-get update && apt-get install -y \
 COPY --from=builder /app/gateway/build/libs/gateway-1.0.0.jar app.jar
 COPY --from=builder /app/gateway/build/resources/main/static static/
 
-# Copy the universal orchestrator and registry
+# Copy the universal orchestrator, registry, and deployment manifest
 COPY acc.py .
+COPY docker-compose.yml .
 COPY brain/ brain/
 COPY config/ config/
 COPY requirements.txt .

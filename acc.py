@@ -12,7 +12,6 @@ import shutil
 import platform
 import time
 from pathlib import Path
-import urllib.request
 
 # --- Configuration ---
 PROJECT_ROOT = Path(__file__).parent.absolute()
@@ -114,46 +113,17 @@ def setup_env():
 def smart_start():
     # If already in Docker, we shouldn't be calling smart_start for infrastructure
     if os.environ.get("IN_DOCKER") == "true":
-        log("Dashboard services are active within the container.")
+        log("Acc Services are active.")
         return
 
-    health_url = "http://localhost:8333/health"
-    try:
-        with urllib.request.urlopen(health_url, timeout=1) as response:
-            if response.status == 200:
-                log("Acc Cockpit is active.")
-                open_dashboard()
-                return
-    except: pass
-
-    compose_file = PROJECT_ROOT / "docker-compose.yml"
-    if not compose_file.exists():
-        log("Fetching deployment configuration...")
-        url = "https://raw.githubusercontent.com/intellibitz/acc/main/docker-compose.yml"
-        with urllib.request.urlopen(url) as response, open(compose_file, "wb") as f:
-            f.write(response.read())
-
-    if shutil.which("docker"):
-        log("Launching via Docker (Zero-Effort Integrity)...")
-        if (PROJECT_ROOT / ".git").exists() and (PROJECT_ROOT / "docker-compose.override.yml").exists():
-            run_shell("docker compose up -d")
-        else:
-            run_shell(f"docker compose -f {compose_file} up -d")
+    # In Creator/Source mode, we use Docker Compose from the root
+    if (PROJECT_ROOT / ".git").exists():
+        log("Launching Acc Cockpit in Creator Mode...")
+        run_shell("docker compose up -d")
+        open_dashboard()
     else:
-        error("Docker not found. Please install Docker to use Acc.")
+        error("Standalone mode is now managed via 'docker run'. Please see README.md")
         sys.exit(1)
-
-    log("Waiting for Cockpit to come online...")
-    for _ in range(30):
-        try:
-            with urllib.request.urlopen(health_url, timeout=1) as response:
-                if response.status == 200:
-                    log("[SUCCESS] Cockpit online.")
-                    open_dashboard()
-                    return
-        except: pass
-        time.sleep(2)
-    error("Manager failed to start. Check docker logs.")
 
 def open_dashboard():
     import webbrowser
@@ -215,8 +185,7 @@ def main():
         url = "http://localhost:8333/provisioning/up"
         if args.subcommand: url += f"?model={args.subcommand}"
         try:
-            req = urllib.request.Request(url, method="POST")
-            urllib.request.urlopen(req)
+            run_shell(f'curl -skX POST "{url}"')
         except: error("Gateway not responding. Is Acc running?")
     elif args.command == "stop":
         log("Stopping infrastructure...")
