@@ -22,7 +22,7 @@ get_fleet_entries() {
     jq -r '.models[] | "\(.provider)|\(.name)|\(.repo)|\(.filePattern)|\(.tier)|\(.quant)|\(.superpower)|\(.isPrivate)"' "$FLEET_JSON"
 }
 
-OSM_CMD="bash $CORE_DIR/osm.sh"
+OSM_CMD="bash $CORE_DIR/hwt.sh"
 ARCHITECT_MANIFESTO="You are the Master Architect, an elite Android Lead Engineer."
 
 merge_gguf() {
@@ -51,19 +51,7 @@ get_model_params() {
 
 provision_model() {
     local entry=$1
-    IFS='|' read -r provider target_name repo file_pattern tier target_quant superpower base_source <<< "$(echo "$entry" | tr -d '\r')"
-
-    # Backward compatibility: if provider looks like a model name, shift
-    if [[ "$provider" != "ollama" && "$provider" != "localai" && "$provider" != "vllm" ]]; then
-        base_source=$superpower
-        superpower=$target_quant
-        target_quant=$tier
-        tier=$file_pattern
-        file_pattern=$repo
-        repo=$target_name
-        target_name=$provider
-        provider="ollama"
-    fi
+    IFS='|' read -r provider target_name repo file_pattern tier target_quant superpower is_private <<< "$(echo "$entry" | tr -d '\r')"
 
     log "----------------------------------------------------"
     log ">>> SYNC CHECK: [$provider] $target_name"
@@ -71,19 +59,31 @@ provision_model() {
     local model_opt_dir="$OPT_DIR/$target_name"; local local_sha_file="$model_opt_dir/last_sync_sha"
     mkdir -p "$model_opt_dir"
 
+    # Cloud providers are always "provisioned"
+    if [[ "$provider" == "openai" || "$provider" == "anthropic" || "$provider" == "gemini" ]]; then
+        log "[ATTACH] Cloud engine '$provider' detected. Skipping local provisioning."
+        echo "EXTERNAL" > "$local_sha_file"; return 0
+    fi
+
     local remote_sha=$(curl -L -4 -s "https://huggingface.co/api/models/$repo" | jq -r '.sha' 2>/dev/null)
     local local_sha=$(cat "$local_sha_file" 2>/dev/null)
 
-    if [[ "$remote_sha" == "$local_sha" ]] && ollama list | grep -q "$target_name" && [[ "$FORCE_REPROVISION" != "true" ]]; then
+    # Check if already installed (Provider-specific check)
+    local is_installed=false
+    if [[ "$provider" == "ollama" ]]; then
+        ollama list | grep -q "$target_name" && is_installed=true
+    elif [[ "$provider" == "localai" ]]; then
+        [ -f "$PROJECT_ROOT/models/$target_name.yaml" ] && is_installed=true
+    fi
+
+    if [[ "$remote_sha" == "$local_sha" ]] && [ "$is_installed" = true ] && [[ "$FORCE_REPROVISION" != "true" ]]; then
         log "[MATCH] $target_name is current."; return 0
     fi
 
-    log "[UPDATE] Provisioning $target_name..."
+    log "[UPDATE] Provisioning $target_name via $provider..."
     local model_dl_dir="$DOWNLOAD_DIR/$target_name"; mkdir -p "$model_dl_dir"
 
-    if [[ "$DL_METHOD" == "pull" ]]; then
-        ollama pull "$target_name"
-    elif [[ "$DL_METHOD" == "hf" ]]; then
+    if [[ "$DL_METHOD" == "hf" ]]; then
         export HF_HUB_ENABLE_HF_TRANSFER=1
         hf download "$repo" --include "$file_pattern" --local-dir "$model_dl_dir" --max-workers 8 || return 1
     fi
@@ -93,32 +93,42 @@ provision_model() {
     if [[ -z "$found_file" ]]; then merge_gguf "$model_dl_dir" "$final_gguf"; found_file=$(find "$model_dl_dir" -name "*.gguf" | head -n 1); fi
 
     if [[ -z "$found_file" || ! -f "$found_file" ]]; then
-        log "[ERROR] No GGUF file found for $target_name after download/merge."
+        log "[ERROR] No model file found for $target_name after download."
         return 1
     fi
 
-    local gpu_layers=$(calculate_gpu_layers "$target_name"); local threads=$(nproc --ignore=4)
-    local user_params=$(get_model_params "$target_name")
+    if [[ "$provider" == "ollama" ]]; then
+        provision_ollama "$target_name" "$found_file" "$model_opt_dir"
+    elif [[ "$provider" == "localai" ]]; then
+        provision_localai "$target_name" "$found_file"
+    else
+        log "[SKIP] Engine '$provider' provisioning not yet implemented via shell."
+    fi
+
+    echo "$remote_sha" > "$local_sha_file"
+    rm -rf "$model_dl_dir"
+}
+
+provision_ollama() {
+    local name=$1; local file=$2; local opt_dir=$3
+    local gpu_layers=$(calculate_gpu_layers "$name"); local threads=$(nproc --ignore=4)
+    local user_params=$(get_model_params "$name")
 
     printf "FROM %s\nPARAMETER num_gpu %s\nPARAMETER num_thread %s\nPARAMETER num_ctx 32768\n%s\nSYSTEM \"\"\"%s\"\"\"" \
-        "$found_file" "$gpu_layers" "$threads" "$user_params" "$ARCHITECT_MANIFESTO" > "$model_opt_dir/Modelfile"
+        "$file" "$gpu_layers" "$threads" "$user_params" "$ARCHITECT_MANIFESTO" > "$opt_dir/Modelfile"
 
-    ollama rm "$target_name" >/dev/null 2>&1
-    if [[ "$provider" == "ollama" ]]; then
-        log "[REGISTER] Creating model $target_name..."
-        if ollama create "$target_name" -f "$model_opt_dir/Modelfile" 2>&1 | tee -a "$LOG_FILE"; then
-            log "[SUCCESS] $target_name active."; echo "$remote_sha" > "$local_sha_file"; rm -rf "$model_dl_dir"
-        else
-            log "[ERROR] Ollama build failed for $target_name. Check logs."
-            return 1
-        fi
-    elif [[ "$provider" == "external" || "$provider" == "openai" ]]; then
-        log "[ATTACH] External model '$target_name' detected. Skipping provisioning."
-        echo "EXTERNAL" > "$local_sha_file"
-    else
-        log "[SKIP] Engine '$provider' provisioning not yet implemented via shell. Please use Docker or Config/litellm_config.yaml."
-        echo "$remote_sha" > "$local_sha_file"
-    fi
+    log "[REGISTER] Creating Ollama model $name..."
+    ollama rm "$name" >/dev/null 2>&1
+    ollama create "$name" -f "$opt_dir/Modelfile" 2>&1 | tee -a "$LOG_FILE"
+}
+
+provision_localai() {
+    local name=$1; local file=$2
+    log "[REGISTER] Creating LocalAI config for $name..."
+    # Implementation for generating LocalAI YAML
+    echo "name: $name" > "$PROJECT_ROOT/models/$name.yaml"
+    echo "parameters:" >> "$PROJECT_ROOT/models/$name.yaml"
+    echo "  model: $file" >> "$PROJECT_ROOT/models/$name.yaml"
 }
 
 prune_fleet() {

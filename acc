@@ -9,7 +9,7 @@ RUN_DIR="$PROJECT_ROOT/data/run"; mkdir -p "$RUN_DIR"
 VENV_DIR="$PROJECT_ROOT/.venv"
 
 PROVISIONER="bash $CORE_DIR/provisioner.sh"
-OSM="bash $CORE_DIR/osm.sh"
+OSM="bash $CORE_DIR/hwt.sh"
 DASH_PID_FILE="$RUN_DIR/dash.pid"; LOCK_FILE="$RUN_DIR/acc.lock"
 
 log() { echo -e "[\033[1;34macc\033[0m] $1"; }

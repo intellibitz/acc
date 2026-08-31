@@ -7,10 +7,10 @@ Welcome to the Acc cockpit. Here is the current architectural status as of late 
 Command execution is handled by `cc.thevar.acc.service.CommandHandler`, which enforces strict whitelisting and routes commands to either internal Kotlin services or sanitized shell executions.
 
 ## 🏗️ The Bridge & Container Pattern
-Acc follows a **Container-First** architecture.
-- **The Kotlin Gateway** and **Python Bridge** run within a unified Docker environment (defined in `gateway/Dockerfile`).
-- **Hardware stats** are platform-aware, detecting Apple Silicon (MPS) vs NVIDIA (CUDA) automatically.
-- **Resilient Bootstrapping**: The `acc` script prioritizes Docker Compose for a true "Zero-Footprint" experience, falling back to host execution only if Docker is missing.
+Acc follows a **Container-First, Engine-Neutral** architecture.
+- **The Kotlin Gateway** and **Python Bridge** run within a unified Docker environment.
+- **Engine Neutrality**: Support for Ollama, LocalAI, and vLLM is abstracted. The Provisioner handles provider-specific registration (e.g., Modelfiles for Ollama, YAMLs for LocalAI).
+- **Hardware Tuning**: Abstracted into `hwt.sh` (Hardware Tuner), which optimizes the host system (Kernel, GPU, CPU) regardless of which AI engine is used.
 
 ## 🚀 Resilient Bootstrapping
 Acc implements a "True Zero-Effort" universal bootstrapper.
