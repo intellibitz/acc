@@ -17,7 +17,8 @@ import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.*
-import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.*
+import kotlinx.serialization.encodeToString
 import java.io.File
 import java.security.KeyStore
 import java.util.*
@@ -65,7 +66,11 @@ fun main() {
 
         // Add HTTPS connector if keystore exists
         if (keyStoreFile.exists()) {
-            val keyStorePassword = "password".toCharArray()
+            val keyStorePassword = System.getenv("ACC_KEYSTORE_PASSWORD")?.toCharArray() 
+                ?: "password".toCharArray() // Fallback with warning
+            if (System.getenv("ACC_KEYSTORE_PASSWORD") == null) {
+                println("[WARN] ACC_KEYSTORE_PASSWORD not set. Using default.")
+            }
             val keyStore = KeyStore.getInstance("PKCS12")
             keyStoreFile.inputStream().use { keyStore.load(it, keyStorePassword) }
 
@@ -133,18 +138,24 @@ fun Application.module() {
                 try {
                     val process = ProcessBuilder("python3", "brain/system_bridge.py")
                         .directory(projectRoot)
-                        .redirectError(ProcessBuilder.Redirect.PIPE)
                         .start()
                     val output = process.inputStream.bufferedReader().readText()
                     if (output.isNotEmpty()) {
-                        val json = try {
-                            val statesJson = Json.encodeToString(supervisorService.workerStates.value)
-                            output.replace("\"statusMsg\"\\s*:\\s*\"[^\"]*\"".toRegex(), "\"statusMsg\":\"$systemStatusMsg\"")
-                                  .replace("\"workers\"\\s*:\\s*\\[\\]".toRegex(), "\"workers\":$statesJson")
-                        } catch (e: Exception) { output }
+                        val bridgeData = Json.parseToJsonElement(output).jsonObject
                         
+                        val fullState = SystemState(
+                            stats = Json.decodeFromJsonElement<SystemStats>(bridgeData["stats"]!!),
+                            fleet = Json.decodeFromJsonElement<List<ModelStatus>>(bridgeData["fleet"]!!),
+                            partialDownloads = Json.decodeFromJsonElement<List<String>>(bridgeData["partialDownloads"]!!),
+                            proxyOnline = Json.decodeFromJsonElement<Boolean>(bridgeData["proxyOnline"]!!),
+                            workers = supervisorService.workerStates.value,
+                            provisioning = provisioningService.updates.value.values.toList(),
+                            statusMsg = systemStatusMsg
+                        )
+                        
+                        val jsonFrame = Frame.Text(Json.encodeToString(fullState))
                         sessionsToUpdate.forEach { session ->
-                            session.launch { try { session.send(Frame.Text(json)) } catch (e: Exception) {} }
+                            session.launch { try { session.send(jsonFrame) } catch (e: Exception) {} }
                         }
                     }
                 } catch (e: Exception) {
@@ -205,12 +216,25 @@ fun Application.module() {
         webSocket("/ws/system") { systemSessions.add(this); try { for (frame in incoming) { } } finally { systemSessions.remove(this) } }
         
         webSocket("/ws/console") {
+            val allowedCommands = setOf("up", "tune-hw", "sync", "auto-scale", "benchmark", "prune", "stop", "update", "refresh", "setup")
             try {
                 for (frame in incoming) {
                     if (frame is Frame.Text) {
-                        val command = frame.readText()
-                        send(Frame.Text(Json.encodeToString(ConsoleLine("$ acc $command", "COMMAND"))))
-                        val process = ProcessBuilder("./acc", command).directory(projectRoot).redirectErrorStream(true).start()
+                        val commandLine = frame.readText().trim()
+                        val baseCommand = commandLine.split(" ").firstOrNull()
+                        
+                        if (baseCommand !in allowedCommands) {
+                            send(Frame.Text(Json.encodeToString(ConsoleLine("Error: Command '$baseCommand' is not allowed.", "ERROR"))))
+                            continue
+                        }
+
+                        send(Frame.Text(Json.encodeToString(ConsoleLine("$ acc $commandLine", "COMMAND"))))
+                        
+                        val process = ProcessBuilder("./acc", *commandLine.split(" ").toTypedArray())
+                            .directory(projectRoot)
+                            .redirectErrorStream(true)
+                            .start()
+                        
                         process.inputStream.bufferedReader().useLines { lines ->
                             lines.forEach { line -> launch { send(Frame.Text(Json.encodeToString(ConsoleLine(line, "INFO")))) } }
                         }

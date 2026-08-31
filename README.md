@@ -22,15 +22,16 @@ acc is designed for the developer who wants to *use* AI, not fight with dependen
 - **Private Fleet**: Separate your paid/private models using the git-ignored `config/private_fleet.conf`.
 - **Smart Provisioning**: Resilient multi-connection downloads via official **HF-CLI**.
 - **Elite Tuning**: Automated kernel and driver optimization for maximum performance.
+- **Sandboxed Security**: Hardened console with command white-listing and environment-based secret management.
 
 ---
 
 ## 🏗️ Project Structure (Standard Format)
 acc is organized into a clean, professional architecture:
-- **`gateway/`**: The **Manager** (Control Plane). A high-performance Ktor hub that supervises all workers, handles provisioning, and serves the UI.
-- **`frontend/`**: The **Deck** (UI). A Compose Multiplatform app providing real-time observability and control.
-- **`brain/`**: The **Intelligence** layer. Managed Python workers for agents and system metrics.
-- **`common/`**: The **Registry**. Shared type-safe protocols and models for cross-platform integrity.
+- **`gateway/`**: The **Manager** (Control Plane). A high-performance Ktor hub that supervises all workers, handles provisioning, and serves the UI. Now features a hardened command API and structured hardware-stats bridge.
+- **`frontend/`**: The **Deck** (UI). A Compose Multiplatform app providing real-time observability. Modularized into discrete components (Sidebar, Console, Dashboard) with full **Edge-to-Edge** support.
+- **`brain/`**: The **Intelligence** layer. Managed Python workers for agents and system metrics, communicating via type-safe JSON protocols.
+- **`common/`**: The **Registry**. Shared type-safe protocols and models ensuring backend-to-frontend integrity, verified by automated JVM tests.
 - **`tooling/`**: The **Workshop**. Low-level scripts for project maintenance and benchmarking.
 
 ---
@@ -79,12 +80,19 @@ The `acc` script acts as a smart dispatcher for your workstation:
 | **`./acc dev push`** | Auto-stage and push project changes to GitHub. |
 | **`./acc dev benchmark`** | Run the token-per-second (TPS) performance suite. |
 
-## 🛡️ Self-Healing Architecture
+## 🛡️ Self-Healing & Secure Architecture
 acc is built like a production container orchestrator:
 - **Manager-Worker Model**: The Gateway acts as a Control Plane, supervising all background processes.
 - **Auto-Heal**: If a metrics bridge or agent crashes, the Manager automatically detects and restarts it.
+- **Console Sandbox**: The terminal interface is restricted to a white-list of safe maintenance and provisioning commands, preventing Remote Code Execution (RCE).
+- **Secret Management**: Sensitive data, such as keystore passwords, are managed via environment variables (`ACC_KEYSTORE_PASSWORD`).
 - **Bootstrap UI**: In fresh environments, the Manager serves a live "Bootstrap Page" showing real-time build and setup progress until the cockpit is ready.
-- **Zero-Conf Pathing**: Advanced project root detection allows acc to run reliably from any directory.
+
+## 🧪 Reliability & Testing
+acc maintains high stability through a multi-layered testing strategy:
+- **Protocol Integrity**: Automated tests in `:common` verify that the JSON communication between Python workers, the Kotlin Gateway, and the Compose UI never breaks.
+- **Environment Audit**: The `./acc setup` command performs a pre-flight health check of your kernel, drivers, and toolchain.
+- **Visual Parity**: UI components are developed with Material 3 tokens to ensure consistent rendering across Wasm, Android, and Desktop.
 
 ---
 

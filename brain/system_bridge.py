@@ -109,11 +109,9 @@ def get_system_state():
             "gpu": gpu,
             "diskUsage": disk
         },
-        "workers": [],
         "fleet": fleet,
         "partialDownloads": partials,
-        "proxyOnline": proxy_online,
-        "statusMsg": "READY"
+        "proxyOnline": proxy_online
     }
 
 if __name__ == "__main__":
