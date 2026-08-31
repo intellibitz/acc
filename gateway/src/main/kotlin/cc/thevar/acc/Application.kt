@@ -59,7 +59,35 @@ val projectRoot = File(".").absoluteFile.parentFile ?: File(".")
 val fleetManager = FleetManager(File(projectRoot, "config"))
 val provisioningService = ProvisioningService(projectRoot, fleetManager)
 
+var systemStatusMsg = "Initializing Acc..."
+
 fun Application.module() {
+    // Check for first-run
+    val initSentinel = File(projectRoot, "data/.initialized")
+    if (!initSentinel.exists()) {
+        launch(Dispatchers.IO) {
+            systemStatusMsg = "Bootstrapping environment (Health Audit)..."
+            val process = ProcessBuilder("./acc", "setup")
+                .directory(projectRoot)
+                .redirectErrorStream(true)
+                .start()
+            
+            process.inputStream.bufferedReader().useLines { lines ->
+                lines.forEach { line ->
+                    systemStatusMsg = line
+                    // Stream to console if needed
+                }
+            }
+            process.waitFor()
+            initSentinel.createNewFile()
+            systemStatusMsg = "Bootstrap complete. Restarting for security..."
+            delay(1000)
+            ProcessBuilder("./acc", "refresh").directory(projectRoot).start()
+        }
+    } else {
+        systemStatusMsg = "Acc Ready."
+    }
+
     install(WebSockets) {
         contentConverter = KotlinxWebsocketSerializationConverter(Json)
         pingPeriod = 15.seconds
@@ -74,16 +102,27 @@ fun Application.module() {
     // Launch background task for system state polling
     launch(Dispatchers.IO) {
         while (isActive) {
-            if (systemSessions.isNotEmpty()) {
+            val sessionsToUpdate = systemSessions + uiSessions
+            if (sessionsToUpdate.isNotEmpty()) {
                 try {
                     val process = ProcessBuilder("python3", "brain/system_bridge.py")
                         .redirectError(ProcessBuilder.Redirect.PIPE)
                         .start()
                     val output = process.inputStream.bufferedReader().readText()
                     if (output.isNotEmpty()) {
-                        systemSessions.forEach { session ->
+                        // Inject our internal status message
+                        val json = Json.parseToJsonElement(output).let { element ->
+                            val map = element.run { 
+                                // In a real implementation, we'd use a proper serializer
+                                // but for a quick fix, we'll just update the statusMsg field
+                                output.replace("\"statusMsg\":\"\"", "\"statusMsg\":\"$systemStatusMsg\"")
+                            }
+                            map
+                        }
+                        
+                        sessionsToUpdate.forEach { session ->
                             session.launch {
-                                session.send(Frame.Text(output))
+                                session.send(Frame.Text(json))
                             }
                         }
                     }

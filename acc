@@ -86,19 +86,10 @@ setup_env() {
 }
 
 smart_start() {
-    # 1. Zero-Effort Installation Check
-    if [ ! -f "$INIT_SENTINEL" ]; then
-        log "\033[1;35mINITIALIZING ACC\033[0m: Setting up your workstation for the first time..."
-        # Run install.sh logic locally
-        chmod +x "$PROJECT_ROOT/acc" "$CORE_DIR/"*.sh
-        setup_env
-        touch "$INIT_SENTINEL"; log "[SUCCESS] Ready."
-    fi
+    # 1. Start Infrastructure in background
+    systemctl is-active --quiet ollama || { log "Starting Ollama..."; sudo systemctl start ollama; sleep 1; }
 
-    # 2. Start Infrastructure
-    systemctl is-active --quiet ollama || { log "Starting Ollama..."; sudo systemctl start ollama; sleep 2; }
-
-    # 3. Launch Dashboard & Visual Interface
+    # 2. Check if we are in TMUX
     if [ -n "$TMUX" ]; then
         bash "$PROJECT_ROOT/acc" dash
         return
@@ -109,27 +100,17 @@ smart_start() {
         tmux attach-session -t acc
     else
         cleanup_dash
-        # Start Gateway in background
+        # Start Gateway immediately
+        log "Launching Acc Visual Dashboard..."
         bash "$PROJECT_ROOT/acc" gui > /dev/null 2>&1 &
 
         # Setup TMUX for logs
         tmux new-session -d -s acc -n "Gateway" "bash $PROJECT_ROOT/acc logs"
 
-        # Foreground wait for healthy gateway
-        log "Launching Visual Dashboard..."
-        log "Waiting for Gateway to initialize..."
-        timeout=60
-        while [ $timeout -gt 0 ]; do
-            if curl -sk https://localhost:8333/health > /dev/null; then
-                log "[SUCCESS] Acc Visual Dashboard is live."
-                log "Opening: https://localhost:8333"
-                open_url "https://localhost:8333"
-                return
-            fi
-            sleep 2
-            ((timeout--))
-        done
-        log "\033[1;31mERROR\033[0m: Gateway timed out. Check logs/gateway.log"
+        # OPEN BROWSER IMMEDIATELY (Don't wait for health check)
+        # We try HTTP first as Gateway starts in HTTP during first-run bootstrap
+        log "Opening: http://localhost:8333"
+        (sleep 2 && open_url "http://localhost:8333") &
     fi
 }
 

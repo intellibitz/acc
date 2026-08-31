@@ -56,6 +56,8 @@ fun App() {
                 TopAppBar(
                     title = { Text("AI Command Center [acc]", fontWeight = FontWeight.Bold) },
                     actions = {
+                        Text(systemState?.statusMsg ?: "Connecting...", fontSize = 12.sp, color = Color.Gray)
+                        Spacer(modifier = Modifier.width(8.dp))
                         StatusBadge(if (systemState?.proxyOnline == true) "PROXY ON" else "PROXY OFF", 
                             if (systemState?.proxyOnline == true) Color.Green else Color.Gray)
                     }
