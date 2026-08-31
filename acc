@@ -9,7 +9,7 @@ RUN_DIR="$PROJECT_ROOT/data/run"; mkdir -p "$RUN_DIR"
 VENV_DIR="$PROJECT_ROOT/.venv"
 
 PROVISIONER="bash $CORE_DIR/provisioner.sh"
-OSM="bash $CORE_DIR/hwt.sh"
+HWT="bash $CORE_DIR/hwt.sh"
 DASH_PID_FILE="$RUN_DIR/dash.pid"; LOCK_FILE="$RUN_DIR/acc.lock"
 
 log() { echo -e "[\033[1;34macc\033[0m] $1"; }
@@ -85,7 +85,7 @@ setup_env() {
     fi
 
     if [ -f "$PROJECT_ROOT/common/hwt.sh" ]; then
-        $OSM sync --auto; $OSM tune
+        $HWT sync --auto; $HWT tune
     else
         log "[SKIP] common/hwt.sh not found. Skipping hardware tuning."
     fi
@@ -154,9 +154,9 @@ case "$1" in
         fi
         ;;
     dash) source "$VENV_DIR/bin/activate"; python3 "$PROJECT_ROOT/tooling/tui_dashboard.py" ;;
-    status) [ -f "$PROJECT_ROOT/common/hwt.sh" ] && $OSM status || log "[SKIP] hwt.sh not found." ;;
-    sync) [ -f "$PROJECT_ROOT/common/hwt.sh" ] && $OSM sync || log "[SKIP] hwt.sh not found." ;;
-    tune-hw) [ -f "$PROJECT_ROOT/common/hwt.sh" ] && $OSM tune || log "[SKIP] hwt.sh not found." ;;
+    status) [ -f "$PROJECT_ROOT/common/hwt.sh" ] && $HWT status || log "[SKIP] hwt.sh not found." ;;
+    sync) [ -f "$PROJECT_ROOT/common/hwt.sh" ] && $HWT sync || log "[SKIP] hwt.sh not found." ;;
+    tune-hw) [ -f "$PROJECT_ROOT/common/hwt.sh" ] && $HWT tune || log "[SKIP] hwt.sh not found." ;;
     maint)
         case "$2" in
             kill) [ -f "./gradlew" ] && ./gradlew --stop; pkill -f "cc.thevar.acc" ;;
@@ -186,11 +186,17 @@ case "$1" in
         ;;
     stop)
         cleanup_dash
-        [ -f "$PROJECT_ROOT/common/hwt.sh" ] && $OSM stop
+        [ -f "$PROJECT_ROOT/common/hwt.sh" ] && $HWT stop
         pkill -f "cc.thevar.acc"
         log "System stopped."
         ;;
     uninstall)
+        if [ -d "$PROJECT_ROOT/.git" ]; then
+            error "Uninstall blocked: This appears to be a Creator/Source directory (found .git)."
+            error "If you want to delete this repository, please use 'rm -rf $PROJECT_ROOT' manually."
+            exit 1
+        fi
+
         log "WARNING: This will completely remove Acc and all AI models."
         read -p "[PROMPT] Are you sure? (y/N) " -n 1 -r
         echo

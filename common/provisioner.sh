@@ -22,7 +22,7 @@ get_fleet_entries() {
     jq -r '.models[] | "\(.provider)|\(.name)|\(.repo)|\(.filePattern)|\(.tier)|\(.quant)|\(.superpower)|\(.isPrivate)"' "$FLEET_JSON"
 }
 
-OSM_CMD="bash $CORE_DIR/hwt.sh"
+HWT_CMD="bash $CORE_DIR/hwt.sh"
 ARCHITECT_MANIFESTO="You are the Master Architect, an elite Android Lead Engineer."
 
 merge_gguf() {

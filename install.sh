@@ -12,8 +12,32 @@ REPO="intellibitz/acc"
 log() { echo -e "[\033[1;34macc-install\033[0m] $1"; }
 error() { echo -e "[\033[1;31merror\033[0m] $1"; exit 1; }
 
-mkdir -p "$INSTALL_DIR" "$BIN_DIR"
+mkdir -p "$BIN_DIR"
 
+if [ -d "$INSTALL_DIR" ]; then
+    log "Existing installation detected at $INSTALL_DIR"
+    echo "----------------------------------------------------"
+    echo "1) Update (Keep models and settings)"
+    echo "2) Clean Reinstall (Fresh start - deletes everything)"
+    echo "----------------------------------------------------"
+    read -p "[PROMPT] Select option [1/2]: " -n 1 -r
+    echo
+    if [[ $REPLY == "2" ]]; then
+        log "Performing clean-up before installation..."
+        if [ -x "$INSTALL_DIR/acc" ]; then
+            "$INSTALL_DIR/acc" uninstall || rm -rf "$INSTALL_DIR"
+        else
+            rm -rf "$INSTALL_DIR"
+        fi
+        log "Cleanup complete."
+    else
+        log "Proceeding with update..."
+        # Purge potentially stale internal scripts to ensure engine-neutrality
+        rm -rf "$INSTALL_DIR/common" 2>/dev/null
+    fi
+fi
+
+mkdir -p "$INSTALL_DIR"
 log "Downloading latest orchestrator..."
 curl -sSL "https://raw.githubusercontent.com/$REPO/main/acc" -o "$INSTALL_DIR/acc"
 chmod +x "$INSTALL_DIR/acc"
