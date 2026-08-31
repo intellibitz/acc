@@ -18,7 +18,7 @@ acc is designed for the developer who wants to *use* AI, not fight with dependen
 - **Tool Visualization**: Transparently monitor tool calls (shell commands, file edits) in a terminal-style interface.
 - **Master Orchestrator**: Just type `acc` to start. Docker-first for zero host pollution.
 - **On-Demand Spawning**: Instantly spawn specialized agent bridges (NLE, Architect, Researcher) for any model in your fleet.
-- **Visual Dashboard**: Real-time TUI tracking CPU, RAM, and hardware metrics (NVIDIA CUDA / Apple Silicon).
+- **Visual Dashboard**: Real-time TUI tracking CPU, RAM, and hardware metrics (NVIDIA CUDA / Apple Silicon) via the **HWT** (Hardware Tuner).
 - **Backend Agnostic**: Native support for **Ollama**, **LocalAI**, and **vLLM**, plus integration with cloud providers like **OpenAI**, **Anthropic**, and **Gemini**.
 - **Multi-Engine Fleet**: Mix and match local and cloud models in a unified interface.
 - **Private Fleet**: Separate your paid/private models using the git-ignored `config/private_fleet.conf`.
@@ -33,7 +33,8 @@ acc is organized into a clean, professional architecture:
 - **`gateway/`**: The **Manager** (Control Plane). A high-performance Ktor hub that supervises all workers, handles provisioning (Kotlin-native), and serves the UI. Features a hardened `CommandHandler` and a stream-based hardware-stats consumer.
 - **`frontend/`**: The **Deck** (UI). A Compose Multiplatform app providing real-time observability. Modularized into discrete components (Sidebar, Console, Dashboard) with full **Edge-to-Edge** support.
 - **`brain/`**: The **Intelligence** layer. Managed Python workers for agents and a persistent system metrics bridge, communicating via type-safe JSON protocols.
-- **`common/`**: The **Registry**. Shared type-safe protocols and models ensuring backend-to-frontend integrity, verified by automated JVM tests.
+- **`common/`**: The **Registry**. Shared type-safe protocols and models ensuring backend-to-frontend integrity, verified by automated JVM tests. Includes **HWT** and **Provisioner** logic.
+- **`registry/`**: The **Vault**. Central storage for engine-neutral manifests, model parameters, and provider configurations (e.g., Ollama Modelfiles, LocalAI YAMLs).
 - **`tooling/`**: The **Workshop**. Low-level scripts for project maintenance and benchmarking.
 
 ---
@@ -58,8 +59,8 @@ This will launch everything via **Docker Compose**, keeping your system clean.
 When you run `acc` for the first time:
 1.  **Instant Visuals**: The dashboard launches immediately in your browser.
 2.  **Automated Audit**: acc performs a full system audit, auto-installing missing tools (`tmux`, `jq`, `java`) and managing an isolated **Python .venv** automatically.
-3.  **Visual Bootstrapping**: Status updates are streamed directly to your screen while hardware tuning and background frontend builds occur.
-4.  **Elite Provisioning**: Models are downloaded and optimized using hardware-aware logic within the Kotlin Gateway.
+3.  **Visual Bootstrapping**: Status updates are streamed directly to your screen while hardware tuning (via **HWT**) and background frontend builds occur.
+4.  **Elite Provisioning**: Models are downloaded to a hidden **`.cache/`** and registered into the **`registry/`** using hardware-aware logic within the Kotlin Gateway.
 5.  **Persistent Monitoring**: High-efficiency hardware tracking via a persistent JSON stream bridge with integrated health diagnostics.
 6.  **Unified Control**: Control everything—provision models, tune hardware, and watch agent thought streams—directly from the dashboard.
 
