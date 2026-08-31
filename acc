@@ -86,6 +86,13 @@ setup_env() {
 }
 
 smart_start() {
+    # Check if Manager is already running
+    if curl -sk http://localhost:8333/health > /dev/null; then
+        log "Acc Manager is already running. Opening dashboard..."
+        open_url "http://localhost:8333"
+        return
+    fi
+
     # Reduced to Bootstrap Launcher
     cleanup_dash
 

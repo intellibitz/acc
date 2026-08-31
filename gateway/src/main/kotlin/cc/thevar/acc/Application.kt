@@ -26,12 +26,16 @@ import kotlin.time.Duration.Companion.seconds
 
 // Robust project root detection
 private fun findProjectRoot(): File {
-    var current = File(".").absoluteFile
+    val userDir = System.getProperty("user.dir")?.let { File(it) } ?: File(".")
+    var current: File? = userDir.absoluteFile
+    
     while (current != null) {
-        if (File(current, "acc").exists()) return current
+        if (File(current, "acc").exists() && File(current, "settings.gradle.kts").exists()) {
+            return current
+        }
         current = current.parentFile
     }
-    return File(".").absoluteFile
+    return userDir.absoluteFile
 }
 
 val projectRoot = findProjectRoot()
@@ -45,6 +49,9 @@ val systemSessions = Collections.newSetFromMap(ConcurrentHashMap<DefaultWebSocke
 var systemStatusMsg = "Initializing Acc..."
 
 fun main() {
+    println("[Manager] Starting from: ${System.getProperty("user.dir")}")
+    println("[Manager] Detected Project Root: ${projectRoot.absolutePath}")
+    
     val keyStoreFile = File(projectRoot, "config/keystore.p12")
     val httpPort = 8333
     val httpsPort = 8334
@@ -265,8 +272,17 @@ fun Application.module() {
                     <body>
                         <div class="loader"></div>
                         <div>AI Command Center is initializing...</div>
-                        <div class="status">Frontend Status: ${builder?.status ?: "WAITING"}</div>
-                        <div style="margin-top: 10px; color: gray; font-size: 0.8em;">(This page will auto-refresh when ready)</div>
+                        <div class="status" style="color: #03DAC6; margin-top: 10px;">
+                            ${systemStatusMsg}
+                        </div>
+                        <div style="margin-top: 20px; color: ${if (builder?.status == WorkerStatus.CRASHED) "red" else "#BB86FC"}">
+                            Frontend Build: ${builder?.status ?: "WAITING"}
+                        </div>
+                        <div style="margin-top: 10px; color: gray; font-size: 0.9em; max-width: 80%; text-align: center;">
+                            ${builder?.lastMsg ?: ""}
+                            ${if (builder?.status == WorkerStatus.CRASHED) "<br><br><button onclick=\"location.reload()\" style=\"background: #BB86FC; border: none; padding: 10px 20px; border-radius: 4px; color: black; font-weight: bold; cursor: pointer;\">Retry Build</button>" else ""}
+                        </div>
+                        <div style="margin-top: 30px; color: gray; font-size: 0.7em;">(Auto-refreshing every 5s)</div>
                     </body>
                     </html>
                 """.trimIndent()

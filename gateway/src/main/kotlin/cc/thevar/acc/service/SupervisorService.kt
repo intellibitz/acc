@@ -24,7 +24,7 @@ class SupervisorService(private val projectRoot: File) {
         scope.launch {
             while (isActive) {
                 checkWorkers()
-                delay(5000)
+                delay(2000)
             }
         }
     }
@@ -62,18 +62,31 @@ class SupervisorService(private val projectRoot: File) {
         private var process: Process? = null
         private var status = WorkerStatus.STOPPED
         private var restarts = 0
+        private var lastMsg = ""
         private var lastError: String? = null
+        private var logJob: Job? = null
 
         fun start() {
             if (status == WorkerStatus.RUNNING || status == WorkerStatus.STARTING) return
             
             status = WorkerStatus.STARTING
+            lastError = null
+            
             try {
-                process = ProcessBuilder(command)
-                    .directory(projectRoot)
-                    .redirectErrorStream(true)
-                    .start()
+                val pb = ProcessBuilder(command).directory(projectRoot).redirectErrorStream(true)
+                process = pb.start()
                 status = WorkerStatus.RUNNING
+                
+                // Capture logs
+                logJob?.cancel()
+                logJob = scope.launch {
+                    process?.inputStream?.bufferedReader()?.useLines { lines ->
+                        lines.forEach { line ->
+                            lastMsg = line.trim()
+                            if (lastMsg.length > 100) lastMsg = lastMsg.take(97) + "..."
+                        }
+                    }
+                }
             } catch (e: Exception) {
                 status = WorkerStatus.CRASHED
                 lastError = e.message
@@ -81,6 +94,7 @@ class SupervisorService(private val projectRoot: File) {
         }
 
         fun stop() {
+            logJob?.cancel()
             process?.destroy()
             status = WorkerStatus.STOPPED
         }
@@ -90,13 +104,16 @@ class SupervisorService(private val projectRoot: File) {
         }
 
         fun updateState(): WorkerState {
-            if (process != null && !process!!.isAlive) {
-                if (process!!.exitValue() == 0) {
+            val p = process
+            if (p != null && !p.isAlive) {
+                val exitCode = p.exitValue()
+                if (exitCode == 0) {
                     status = WorkerStatus.COMPLETED
                 } else {
-                    if (status != WorkerStatus.STOPPED) {
+                    if (status != WorkerStatus.STOPPED && status != WorkerStatus.COMPLETED) {
                         status = WorkerStatus.CRASHED
                         restarts++
+                        lastError = "Exit Code $exitCode"
                     }
                 }
             }
@@ -104,8 +121,9 @@ class SupervisorService(private val projectRoot: File) {
             return WorkerState(
                 name = name,
                 status = status,
-                pid = try { process?.pid()?.toInt() } catch (e: Exception) { null },
+                pid = try { p?.pid()?.toInt() } catch (e: Exception) { null },
                 restarts = restarts,
+                lastMsg = if (status == WorkerStatus.RUNNING) lastMsg else (lastError ?: ""),
                 error = lastError
             )
         }
