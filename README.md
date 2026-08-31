@@ -43,19 +43,11 @@ acc is organized into a clean, professional architecture:
 
 Acc is **Unified & Universal**. Run the installer for your OS to launch your cockpit instantly:
 
-### 🐧 Linux & 🍎 macOS
+### 🐧 Linux, 🍎 macOS & 🪟 Windows
 ```bash
-curl -sSL https://raw.githubusercontent.com/intellibitz/acc/main/acc.py -o acc.py
-python3 acc.py setup
-python3 acc.py
+docker run -p 8333:8333 -v /var/run/docker.sock:/var/run/docker.sock intellibitz/acc-gateway
 ```
-
-### 🪟 Windows (PowerShell)
-```powershell
-iwr https://raw.githubusercontent.com/intellibitz/acc/main/acc.py -OutFile acc.py
-python acc.py setup
-python acc.py
-```
+Once the cockpit is up, open **`http://localhost:8333`** to manage your fleet, engines, and agents with total zero-effort.
 
 Once installed, just run `python3 acc.py` to start.
 

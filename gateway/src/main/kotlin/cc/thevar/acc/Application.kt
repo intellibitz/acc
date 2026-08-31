@@ -105,8 +105,9 @@ fun Application.module() {
     if (!initSentinel.exists()) {
         launch(Dispatchers.IO) {
             try {
-                systemStatusMsg = "Bootstrapping environment..."
-                val process = ProcessBuilder("./acc", "setup")
+                systemStatusMsg = "Self-bootstrapping cockpit..."
+                // Inside Docker, we use python3 acc.py setup
+                val process = ProcessBuilder("python3", "acc.py", "setup")
                     .directory(projectRoot)
                     .redirectErrorStream(true)
                     .start()

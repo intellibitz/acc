@@ -54,7 +54,10 @@ class CommandHandler(
 
     private fun executeExternalCommand(command: String, args: List<String>): Flow<ConsoleLine> = flow {
         try {
-            val process = ProcessBuilder("./acc", command, *args.toTypedArray())
+            val cmdList = mutableListOf("python3", "acc.py", command)
+            cmdList.addAll(args)
+            
+            val process = ProcessBuilder(cmdList)
                 .directory(projectRoot)
                 .redirectErrorStream(true)
                 .start()

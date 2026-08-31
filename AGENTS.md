@@ -34,9 +34,7 @@ To keep the "Zero-Effort" promise to Normal Users, we use a fully automated rele
 - [x] Implement integrated `acc uninstall` for total system restoration.
 - [x] Implement **On-Demand Agent Spawning** for Multi-Engine fleets (Local & Cloud).
 - [x] Refactor into **AI-Neutral Folder Structure** (`registry/`, `.cache/`).
-- [x] Implement **Automated Release Pipeline** via GitHub Actions.
-- [x] Sanitize **Uninstall Logic** (Safety First) and remove non-standard Python dependencies.
-- [x] Implement **Multi-Distro Linux Support** (dnf/pacman) and decoupled hardware tuning.
-- [ ] Implement integrated E2E journey tests for the Provisioning flow.
+- [x] Pivot to **"Everything-in-Docker" Architecture**. The cockpit is now a single container that manages engines, provisioning, and agents internally via the Docker socket.
+- [x] Zero-dependency launch: Users only need Docker to run the entire platform.
 
 See [docs/testing.md](docs/testing.md) for verification commands.

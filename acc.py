@@ -112,6 +112,11 @@ def setup_env():
     log("[SUCCESS] Environment ready. Run 'acc.py optimize' if you want to tune hardware.")
 
 def smart_start():
+    # If already in Docker, we shouldn't be calling smart_start for infrastructure
+    if os.environ.get("IN_DOCKER") == "true":
+        log("Dashboard services are active within the container.")
+        return
+
     health_url = "http://localhost:8333/health"
     try:
         with urllib.request.urlopen(health_url, timeout=1) as response:

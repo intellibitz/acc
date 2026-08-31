@@ -15,7 +15,7 @@ RUN ./gradlew :gateway:assemble --no-daemon
 FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app
 
-# Install Python, bridge dependencies, and Docker CLI (to manage engines)
+# Install Python, Docker CLI, and common tools
 RUN apt-get update && apt-get install -y \
     python3 python3-pip python3-venv jq curl \
     ca-certificates gnupg lsb-release && \
@@ -29,14 +29,17 @@ RUN apt-get update && apt-get install -y \
 COPY --from=builder /app/gateway/build/libs/gateway-1.0.0.jar app.jar
 COPY --from=builder /app/gateway/build/resources/main/static static/
 
-# Copy bridge and scripts
+# Copy the universal orchestrator and registry
+COPY acc.py .
 COPY brain/ brain/
+COPY config/ config/
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt huggingface-hub
 
 # Environment Setup
 ENV PROJECT_ROOT=/app
 ENV PORT=8333
+ENV IN_DOCKER=true
 
 EXPOSE 8333
 
