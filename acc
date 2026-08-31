@@ -28,13 +28,13 @@ open_url() {
 setup_env() {
     log "Performing System Health Audit..."
     local missing=()
-    for cmd in tmux aria2c jq hf ollama docker java curl keytool; do
+    for cmd in tmux jq hf ollama docker java curl keytool; do
         if ! command -v $cmd &> /dev/null; then missing+=("$cmd"); fi
     done
 
     if [ ${#missing[@]} -gt 0 ]; then
         log "\033[1;31mCRITICAL\033[0m: Missing required tools: [${missing[*]}]"
-        log "Please install them using your package manager (e.g., sudo apt install tmux aria2c jq default-jdk curl)."
+        log "Please install them using your package manager (e.g., sudo apt install tmux jq default-jdk curl)."
         exit 1
     fi
 
@@ -86,6 +86,9 @@ setup_env() {
 }
 
 smart_start() {
+    # Ensure essential directories exist for the Manager to start
+    mkdir -p "$PROJECT_ROOT/logs" "$PROJECT_ROOT/data/run" "$PROJECT_ROOT/config"
+
     # Check if Manager is already running
     if curl -sk http://localhost:8333/health > /dev/null; then
         log "Acc Manager is already running. Opening dashboard..."
@@ -97,7 +100,7 @@ smart_start() {
     cleanup_dash
 
     log "Starting AI Command Center [Manager]..."
-    bash "$PROJECT_ROOT/acc" gui > /dev/null 2>&1 &
+    nohup bash "$PROJECT_ROOT/acc" gui > /dev/null 2>&1 &
 
     # Setup TMUX for logs
     tmux has-session -t acc 2>/dev/null || tmux new-session -d -s acc -n "Gateway" "bash $PROJECT_ROOT/acc logs"

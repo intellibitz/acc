@@ -81,6 +81,7 @@ pip-delete-this-directory.txt
 # Models & Manifests
 *.gguf
 *.part*
+*.bak
 Modelfile
 last_sync_sha
 user_params
@@ -90,3 +91,12 @@ config/private_fleet.conf
 
 # Docker
 .docker/
+
+# Test environments
+/test_acc_environment/
+/test/
+
+# Kotlin / Build specific
+kotlin-js-store/
+.artifacts/
+/build/

@@ -20,7 +20,7 @@ acc is designed for the developer who wants to *use* AI, not fight with dependen
 - **Visual Dashboard**: Real-time TUI tracking CPU, RAM, and NVIDIA GPU metrics.
 - **Backend Agnostic**: Native support for **Ollama**, **LocalAI**, and **vLLM** via LiteLLM abstraction.
 - **Private Fleet**: Separate your paid/private models using the git-ignored `config/private_fleet.conf`.
-- **Smart Provisioning**: Resilient multi-connection downloads (Aria2/HF-CLI).
+- **Smart Provisioning**: Resilient multi-connection downloads via official **HF-CLI**.
 - **Elite Tuning**: Automated kernel and driver optimization for maximum performance.
 
 ---
@@ -91,7 +91,7 @@ acc is built like a production container orchestrator:
 ## 🛠️ Prerequisites
 - **OS**: Linux (Ubuntu/Debian) or WSL2.
 - **Hardware**: NVIDIA GPU (Optional, but highly recommended).
-- **Toolchain**: `docker`, `tmux`, `aria2c`, `jq`, `python3`, `OpenJDK 17+`.
+- **Toolchain**: `docker`, `tmux`, `jq`, `python3`, `OpenJDK 21+`.
 
 ---
 

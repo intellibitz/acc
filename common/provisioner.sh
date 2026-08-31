@@ -87,11 +87,6 @@ provision_model() {
     elif [[ "$DL_METHOD" == "hf" ]]; then
         export HF_HUB_ENABLE_HF_TRANSFER=1
         hf download "$repo" --include "$file_pattern" --local-dir "$model_dl_dir" --max-workers 8 || return 1
-    elif [[ "$DL_METHOD" == "aria" ]]; then
-        local files=$(curl -s "https://huggingface.co/api/models/$repo" | jq -r '.siblings[].rpath' | grep -E "${file_pattern//\*/.*}")
-        for file in $files; do
-            aria2c -c -x 16 -s 16 --dir="$model_dl_dir" --out="$file" "https://huggingface.co/$repo/resolve/main/$file" || return 1
-        done
     fi
 
     local final_gguf="$model_dl_dir/model.gguf"
