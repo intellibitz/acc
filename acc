@@ -124,7 +124,14 @@ smart_start() {
 
     if command -v docker-compose &> /dev/null || docker compose version &> /dev/null; then
         log "Launching via Docker (Zero-Effort Integrity)..."
-        docker compose -f "$PROJECT_ROOT/docker-compose.yml" up -d
+
+        # Creator Mode: Use override if in a git repo (enables hot-reloading & building)
+        if [ -d "$PROJECT_ROOT/.git" ] && [ -f "$PROJECT_ROOT/docker-compose.override.yml" ]; then
+            (cd "$PROJECT_ROOT" && docker compose up -d)
+        else
+            # Normal User: Use base config ONLY (forces image-pull, ignores overrides)
+            (cd "$PROJECT_ROOT" && docker compose -f docker-compose.yml up -d)
+        fi
     else
         log "Docker not found. Falling back to local host execution..."
         if [ ! -f "$PROJECT_ROOT/requirements.txt" ]; then
@@ -217,7 +224,11 @@ case "$1" in
 
         log "Stopping infrastructure..."
         if [ -f "$PROJECT_ROOT/docker-compose.yml" ]; then
-             docker compose -f "$PROJECT_ROOT/docker-compose.yml" down -v 2>/dev/null
+            if [ -d "$PROJECT_ROOT/.git" ] && [ -f "$PROJECT_ROOT/docker-compose.override.yml" ]; then
+                 (cd "$PROJECT_ROOT" && docker compose down -v 2>/dev/null)
+            else
+                 (cd "$PROJECT_ROOT" && docker compose -f docker-compose.yml down -v 2>/dev/null)
+            fi
         fi
         pkill -f "cc.thevar.acc" || true
 

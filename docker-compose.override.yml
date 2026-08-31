@@ -1,5 +1,8 @@
 services:
   acc-gateway:
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
     volumes:
       - .:/app # Mount source for hot-reloading bridge logic
       - /var/run/docker.sock:/var/run/docker.sock

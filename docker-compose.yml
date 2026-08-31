@@ -1,8 +1,6 @@
 services:
   acc-gateway:
-    build:
-      context: .
-      dockerfile: gateway/Dockerfile
+    image: intellibitz/acc-gateway:latest
     container_name: acc-gateway
     ports:
       - "8333:8333"
@@ -11,12 +9,12 @@ services:
     volumes:
       - ./config:/app/config
       - ./logs:/app/logs
-      - /var/run/docker.sock:/var/run/docker.sock # Allow gateway to manage engines
+      - /var/run/docker.sock:/var/run/docker.sock
 
   ollama:
     image: ollama/ollama:latest
     container_name: acc-ollama
-    profiles: ["engine"] # Do not start by default
+    profiles: ["engine"]
     ports:
       - "11434:11434"
     volumes:
