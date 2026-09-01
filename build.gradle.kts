@@ -107,31 +107,43 @@ tasks.register<Exec>("pushToGitHub") {
     commandLine("git", "push", "origin", "HEAD")
 }
 
-tasks.register<Exec>("syncToGitHub") {
+tasks.register<Exec>("githubSync") {
     group = "publishing"
-    description = "Automatically adds, commits, and pushes all changes to GitHub (handles protected main branch)."
+    description = "Smart sync: Keeps current branch updated with remote and origin/main."
     val script = """
+        git fetch --all --prune
         CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+        
+        # Capture local work
         git add .
         if ! git diff --cached --quiet; then
+          echo "📦 Capturing local work..."
           git commit -m 'chore: automated sync to GitHub' || true
         fi
 
         if [ "${'$'}CURRENT_BRANCH" = "main" ]; then
-          SYNC_BRANCH="sync/${'$'}(date +%Y%m%d-%H%M%S)"
-          echo "On main branch. Creating sync branch: ${'$'}SYNC_BRANCH"
-          git checkout -b "${'$'}SYNC_BRANCH"
-          git push -u origin "${'$'}SYNC_BRANCH"
-          if command -v gh >/dev/null 2>&1; then
-            gh pr create --fill || echo "PR creation failed (maybe it already exists or no changes)"
-          else
-            echo "gh CLI not found, skipping PR creation."
+          if ! git diff --quiet origin/main; then
+            SYNC_BRANCH="sync/${'$'}(date +%Y%m%d-%H%M%S)"
+            echo "⚠️  Dirty main branch detected. Moving work to ${'$'}SYNC_BRANCH..."
+            git checkout -b "${'$'}SYNC_BRANCH"
+            git push -u origin "${'$'}SYNC_BRANCH"
+            if command -v gh >/dev/null 2>&1; then
+              gh pr create --fill || echo "PR exists or no changes."
+            fi
+            git checkout main
           fi
-          git checkout main
-          git fetch origin main
+          echo "🔄 Resetting main to origin/main..."
           git reset --hard origin/main
         else
-          git push origin HEAD
+          echo "🌿 On feature branch: ${'$'}CURRENT_BRANCH"
+          echo "1. Pulling remote updates..."
+          git pull --rebase origin "${'$'}CURRENT_BRANCH" || { echo "❌ Pull failed."; exit 1; }
+          
+          echo "2. Rebasing on origin/main..."
+          git rebase origin/main || { echo "❌ Rebase on main failed. Resolve conflicts manually."; exit 1; }
+          
+          echo "3. Force-pushing clean state..."
+          git push origin HEAD --force-with-lease
         fi
     """.trimIndent()
     commandLine("bash", "-c", script)
@@ -145,10 +157,95 @@ tasks.register<Exec>("githubOpen") {
     commandLine("gh", "repo", "view", "--web")
 }
 
+tasks.register<Exec>("githubFeature") {
+    group = "github"
+    description = "Syncs work, then creates a new feature branch and ensures a PR is open."
+    dependsOn("githubSync")
+    val suffix = if (project.hasProperty("name")) "-${project.property("name")}" else ""
+    val script = """
+        BRANCH_NAME="feature/${'$'}(date +%Y%m%d-%H%M%S)$suffix"
+        git checkout -b "${'$'}BRANCH_NAME"
+        git push -u origin "${'$'}BRANCH_NAME"
+        gh pr create --fill || echo "PR already exists."
+    """.trimIndent()
+    commandLine("bash", "-c", script)
+}
+
+tasks.register<Exec>("githubMain") {
+    group = "github"
+    description = "Syncs work and returns to a fresh, updated main branch."
+    dependsOn("githubSync")
+    commandLine("bash", "-c", "git checkout main && git fetch origin main && git reset --hard origin/main")
+}
+
 tasks.register<Exec>("githubPR") {
     group = "github"
-    description = "Creates a Pull Request for the current branch to 'main'."
-    commandLine("gh", "pr", "create", "--fill")
+    description = "Syncs current work and ensures a PR exists (idempotent)."
+    dependsOn("githubSync")
+    commandLine("bash", "-c", "gh pr create --fill || echo 'PR already exists or no changes.'")
+}
+
+tasks.register<Exec>("githubMerge") {
+    group = "github"
+    description = "Syncs, updates, and enables auto-merge for the current branch."
+    dependsOn("githubPR")
+    val script = """
+        PR_NUM=$(gh pr view --json number -q .number)
+        echo "🚀 Enabling auto-merge for PR #${'$'}PR_NUM..."
+        gh pr merge "${'$'}PR_NUM" --auto --squash --delete-branch
+    """.trimIndent()
+    commandLine("bash", "-c", script)
+}
+
+tasks.register<Exec>("githubMergeAll") {
+    group = "github"
+    description = "Updates and enables auto-merge for all OPEN Pull Requests."
+    dependsOn("githubSync")
+    val script = """
+        echo "🔍 Fetching open pull requests..."
+        gh pr list --state open --json number,title,mergeable,mergeStateStatus --template \
+          '{{range .}}{{.number}}{{"\t"}}{{.mergeable}}{{"\t"}}{{.mergeStateStatus}}{{"\t"}}{{.title}}{{"\n"}}{{end}}' | \
+          while IFS=${'$'}'\t' read -r pr mergeable status title; do
+            echo "------------------------------------------------------------"
+            echo "PR #${'$'}pr: ${'$'}title"
+            if [ "${'$'}mergeable" = "CONFLICTING" ]; then
+              echo "⚠️  Skipping: PR has hard conflicts."
+              continue
+            fi
+            if [ "${'$'}status" = "BEHIND" ]; then
+              echo "🔄 Syncing branch with main..."
+              gh pr update-branch "${'$'}pr" || echo "❌ Update failed."
+            fi
+            echo "🚀 Enabling auto-merge..."
+            gh pr merge "${'$'}pr" --auto --squash --delete-branch || echo "❌ Merge failed."
+          done
+    """.trimIndent()
+    commandLine("bash", "-c", script)
+}
+
+tasks.register<Exec>("githubFixAll") {
+    group = "github"
+    description = "Attempts to fix failed PRs by updating their branches and rerunning CI."
+    dependsOn("githubSync")
+    val script = """
+        gh pr list --json number -q '.[].number' | while read -r pr; do
+          echo "Processing PR #${'$'}pr..."
+          gh pr update-branch "${'$'}pr" || true
+          BRANCH=${'$'}(gh pr view "${'$'}pr" --json headRefName -q .headRefName)
+          RUN_ID=${'$'}(gh run list --branch "${'$'}BRANCH" --status failure --limit 1 --json databaseId -q '.[].databaseId')
+          if [ -n "${'$'}RUN_ID" ]; then
+            echo "Rerunning failed CI run (${'$'}RUN_ID) for PR #${'$'}pr..."
+            gh run rerun "${'$'}RUN_ID" || true
+          fi
+        done
+    """.trimIndent()
+    commandLine("bash", "-c", script)
+}
+
+tasks.register<Exec>("githubSetup") {
+    group = "github"
+    description = "Optimizes GitHub repository settings for the ACC workflow."
+    commandLine("gh", "repo", "edit", "--enable-auto-merge", "--delete-branch-on-merge", "--allow-update-branch", "--enable-squash-merge")
 }
 
 tasks.register<Exec>("githubChecks") {
