@@ -113,3 +113,41 @@ tasks.register<Exec>("syncToGitHub") {
     // We use bash to chain commands and handle the 'nothing to commit' case gracefully
     commandLine("bash", "-c", "git add . && (git commit -m 'chore: automated sync to GitHub' || true) && git push origin HEAD")
 }
+
+// --- GitHub Creator Tasks ---
+
+tasks.register<Exec>("githubOpen") {
+    group = "github"
+    description = "Opens the ACC repository in your default browser."
+    commandLine("gh", "repo", "view", "--web")
+}
+
+tasks.register<Exec>("githubPR") {
+    group = "github"
+    description = "Creates a Pull Request for the current branch to 'main'."
+    commandLine("gh", "pr", "create", "--fill")
+}
+
+tasks.register<Exec>("githubChecks") {
+    group = "github"
+    description = "Displays the status of GitHub Action checks for the current branch."
+    commandLine("gh", "pr", "checks", "--watch")
+}
+
+tasks.register<Exec>("githubIssues") {
+    group = "github"
+    description = "Lists all open issues for the ACC project."
+    commandLine("gh", "issue", "list")
+}
+
+tasks.register<Exec>("githubWiki") {
+    group = "github"
+    description = "Opens the ACC Wiki in your default browser."
+    commandLine("gh", "repo", "view", "--web", "--path", "wiki")
+}
+
+tasks.register<Exec>("githubActions") {
+    group = "github"
+    description = "Opens the GitHub Actions tab in your default browser."
+    commandLine("gh", "run", "list", "--web")
+}
