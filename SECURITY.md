@@ -5,7 +5,7 @@
 We actively provide security updates for the following versions of **acc**:
 
 | Version | Supported          |
-| ------- | ------------------ |
+| :---    | :---               |
 | 1.x.x   | ✅ Yes             |
 | < 1.0   | ❌ No              |
 

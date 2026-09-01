@@ -37,6 +37,15 @@ We use a semi-automated release system triggered by Gradle and completed by GitH
   - Tags and pushes to GitHub.
   - Triggers a **Full Release** on GitHub.
 
+### GitHub Creator Tasks:
+Maintainers can use these specialized tasks to interact with the repository:
+- **Open Repo**: `./gradlew githubOpen` (Opens browser)
+- **Create PR**: `./gradlew githubPR` (Automates `--fill` PR creation)
+- **Check Status**: `./gradlew githubChecks` (Watches CI check progress)
+- **Manage Issues**: `./gradlew githubIssues` (Lists current issues)
+- **View Actions**: `./gradlew githubActions` (Opens Actions tab)
+- **Wiki**: `./gradlew githubWiki` (Opens Wiki)
+
 ### Deployment for Pilots:
 Users can simply download the `acc-gateway-x.y.z.jar` from the GitHub Release and run:
 `java -jar acc-gateway-x.y.z.jar`
@@ -44,7 +53,7 @@ The server and web frontend will be served at `http://localhost:8080`.
 
 ## 🛠️ Development Guidelines
 - **Koin first**: Avoid global singletons. Inject dependencies via constructors or Koin DSL.
-- **Lifecycle Management**: Core services (Supervisor, Provisioning, Monitoring) implement `AutoCloseable`. Always ensure background coroutines and processes are cancelled on `close()`.
+- **Lifecycle Management**: Core services (Supervisor, Provisioning, Monitoring) implement `AutoCloseable`. Always ensure background coroutines and processes are canceled on `close()`.
 - **Stay Modular**: When adding new features to the Gateway, create a new `Routes` file or Service instead of bloating `Application.kt`.
 - **Structured Logging**: Use **SLF4J** (`LoggerFactory.getLogger(javaClass)`) instead of `println`.
 - **Zero Silent Failures**: Never use empty `catch` blocks. Log errors at the appropriate level (WARN/ERROR).
