@@ -9,33 +9,60 @@ jobs:
   build-and-release:
     name: Build and Release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
+          cache: 'gradle'
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
-      - name: Build Gateway
-        run: ./gradlew :gateway:assemble
+      - name: Extract Version
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
-      - name: Package Distribution
+      - name: Build Fat JAR
+        run: ./gradlew :gateway:shadowJar
+
+      - name: Prepare Artifacts
         run: |
-          mkdir -p dist/acc
-          cp gateway/build/libs/gateway-1.0.0.jar dist/acc/app.jar
-          cp LICENSE dist/acc/
-          cd dist && zip -r ../acc-sandbox-${{ github.ref_name }}.zip acc/
+          mkdir -p release-artifacts
+          cp gateway/build/libs/gateway-${{ steps.get_version.outputs.VERSION }}-all.jar release-artifacts/acc-gateway-${{ steps.get_version.outputs.VERSION }}.jar
+          cp LICENSE release-artifacts/
+
+      - name: Determine if Pre-release
+        id: check_prerelease
+        run: |
+          if [[ "${{ github.ref_name }}" == *"-test."* ]]; then
+            echo "IS_PRERELEASE=true" >> $GITHUB_OUTPUT
+          else
+            echo "IS_PRERELEASE=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            acc-sandbox-${{ github.ref_name }}.zip
-            LICENSE
-            RELEASE_NOTES.md
+            release-artifacts/*.jar
+            release-artifacts/LICENSE
+          prerelease: ${{ steps.check_prerelease.outputs.IS_PRERELEASE == 'true' }}
           generate_release_notes: true
+          name: Release ${{ github.ref_name }}
+          body: |
+            ## ACC Release ${{ github.ref_name }}
+            
+            Zero-effort execution:
+            1. Download the `acc-gateway-*.jar`
+            2. Run with: `java -jar acc-gateway-*.jar`
+            3. Open `http://localhost:8080` in your browser.
+            
+            *Automated release by ACC Build System.*

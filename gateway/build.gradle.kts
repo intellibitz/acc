@@ -1,10 +1,11 @@
 plugins {
     alias(libs.plugins.kotlinJvm)
+    alias(libs.plugins.shadow)
     application
 }
 
 group = "cc.thevar.acc"
-version = "1.0.0"
+version = project.property("appVersion") as String
 
 application {
     mainClass.set("cc.thevar.acc.ApplicationKt")

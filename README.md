@@ -4,6 +4,7 @@
 [![Platform: Universal](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-blue.svg)](https://github.com/intellibitz/acc)
 [![Engine: Backend-Agnostic](https://img.shields.io/badge/Engine-Ollama%20%7C%20LocalAI%20%7C%20vLLM-blueviolet.svg)](https://litellm.ai/)
 [![Frontend: Kotlin Multiplatform](https://img.shields.io/badge/Frontend-Compose%20Wasm%20%7C%20Android%20%7C%20Desktop-green.svg)](https://kotlinlang.org/docs/multiplatform.html)
+[![Stack: Kotlin 2.3.20 | Ktor 3.0.3 | Compose 1.10.1](https://img.shields.io/badge/Stack-Kotlin%202.3.20%20%7C%20Ktor%203.0.3%20%7C%20Compose%201.10.1-blue.svg)](https://github.com/intellibitz/acc)
 
 **AI Command Center (acc)** is the elite orchestration environment for AI Agents and LLMs. It
 transforms your workstation into a professional-grade AI cockpit with **zero-effort** provisioning,
@@ -54,16 +55,16 @@ acc is organized into a clean, professional architecture:
 
 ---
 
-## 🚀 Quick Start (Zero-Effort Kotlin Sandbox)
+## 🚀 Quick Start (Zero-Effort AI Cockpit)
 
-`acc` is now a single, self-contained Kotlin application. No Python, no Docker.
+`acc` is a single, self-contained Kotlin application. No Python, no Docker, no complicated setup.
 
-```bash
-# 1-Line Launch (Requires Java 21)
-java -jar acc.jar
-```
-
-Once launched, open **`http://localhost:8333`** to access your elite AI Command Center.
+1. **Download**: Get the latest `acc-gateway-*.jar` from [GitHub Releases](https://github.com/intellibitz/acc/releases).
+2. **Launch**: Run with Java 21:
+   ```bash
+   java -jar acc-gateway-1.0.0.jar
+   ```
+3. **Explore**: Open **`http://localhost:8333`** in your browser to access your AI Command Center.
 
 ### Prerequisites
 - **JDK 21+**: The only requirement to run the cockpit.
@@ -131,8 +132,13 @@ check out our [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### 🛠️ Creator Workflow
 
-1. Build & Run: `./gradlew :gateway:run`
-2. Open Dashboard: `http://localhost:8333`
+Creators (Maintainers) use automated tasks to manage the project:
+
+1. **Run Locally**: `./gradlew :gateway:run`
+2. **Test Release**: `./gradlew releaseTest` (Increments version, tags, and creates a GitHub Pre-release).
+3. **Production Release**: `./gradlew releaseProduction` (Promotes to stable and creates a full GitHub Release).
+
+For deep-dives into the architecture or release system, see [AGENTS.md](AGENTS.md).
 
 ## 🛡️ License
 

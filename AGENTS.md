@@ -9,7 +9,8 @@ Welcome to the **acc** codebase. This project uses a modern, modular architectur
 - **Control Plane (Gateway)**: A modular Ktor server.
   - `Routing.kt`: Modular route definitions.
   - `MonitoringService.kt`: Lifecycle-aware metrics and WebSocket management.
-  - `ProvisioningService.kt`: Resource-safe model downloads and registration.
+  - `ProvisioningService.kt`: Resource-safe model downloads (Ktor-native) and registration.
+  - `AgentService.kt`: Kotlin-native integration with local and cloud LLMs.
 - **Frontend (Deck)**: Compose Multiplatform.
   - Responsive layouts in `App.kt` with breakpoints for Desktop/Mobile.
   - **Platform-Aware Host Discovery**: The `Platform` interface provides default gateway hosts (e.g., `10.0.2.2` for Android emulators, `window.location.hostname` for Web).
@@ -22,6 +23,24 @@ We follow a multi-layered testing approach. Detailed documentation can be found 
 - **Protocol Tests**: `:common:jvmTest`
 - **Gateway Service Tests**: `:gateway:test` (uses MockK and Ktor MockEngine)
 - **Frontend Build Verification**: `./gradlew :frontend:desktop:assemble`
+
+## 🚀 Release Management
+We use a semi-automated release system triggered by Gradle and completed by GitHub Actions.
+
+### Release Tasks:
+- **Test Release**: `./gradlew releaseTest`
+  - Increments version (e.g., `1.0.0` -> `1.0.1-test.1` or `1.0.1-test.1` -> `1.0.1-test.2`).
+  - Tags and pushes to GitHub.
+  - Triggers a **Pre-release** on GitHub with a Fat JAR.
+- **Production Release**: `./gradlew releaseProduction`
+  - Promotes test to production or increments version (e.g., `1.0.1-test.2` -> `1.0.1` or `1.0.1` -> `1.0.2`).
+  - Tags and pushes to GitHub.
+  - Triggers a **Full Release** on GitHub.
+
+### Deployment for Pilots:
+Users can simply download the `acc-gateway-x.y.z.jar` from the GitHub Release and run:
+`java -jar acc-gateway-x.y.z.jar`
+The server and web frontend will be served at `http://localhost:8080`.
 
 ## 🛠️ Development Guidelines
 - **Koin first**: Avoid global singletons. Inject dependencies via constructors or Koin DSL.

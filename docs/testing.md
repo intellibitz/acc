@@ -48,3 +48,11 @@ To run:
 ```bash
 ./gradlew :gateway:test --tests "cc.thevar.acc.service.ProvisioningServiceTest"
 ```
+
+## 🚀 Release Verification
+Before a production release, the following workflow is recommended:
+
+1. **Verify local build**: `./gradlew :gateway:shadowJar`
+2. **Execute Test Release**: `./gradlew releaseTest`
+3. **Smoke Test**: Download the resulting JAR from the GitHub Pre-release and run it in a clean environment.
+4. **Promote**: If the smoke test passes, run `./gradlew releaseProduction`.

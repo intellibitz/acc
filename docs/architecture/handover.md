@@ -4,10 +4,11 @@ Welcome to the Acc cockpit. Here is the current architectural status as of late 
 
 ## 🗝️ Core Security Rule
 **DO NOT allow arbitrary command execution via WebSockets.**
-Command execution is handled by `cc.thevar.acc.service.CommandHandler`, which enforces strict whitelisting. Privileged operations (`setup`, `tune-hw`, `optimize`) are **explicitly blocked** from the UI and must be run manually via `acc.py` on the host to maintain security boundaries.
+Command execution is handled by `cc.thevar.acc.service.CommandHandler`, which enforces strict whitelisting. Privileged operations are managed by the `SystemBootstrapper` or restricted to local-only access to maintain security boundaries.
 
 ## 🏗️ The Kotlin-Native Pattern
 Acc is a **Pure Kotlin-Native Intelligence Layer**.
+- **Tech Stack (Late 2026)**: Kotlin 2.3.20, Ktor 3.0.3, Compose 1.10.1, Koin 4.0.1.
 - **Self-Contained Gateway**: The cockpit is a single project directory containing the Manager (Kotlin) and the UI (Wasm).
 - **Zero Footprint**: The user's system remains untouched outside the project folder. All state is maintained within `data/`, `registry/`, and `logs/`.
 
