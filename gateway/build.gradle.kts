@@ -1,3 +1,5 @@
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+
 plugins {
     alias(libs.plugins.kotlinJvm)
     alias(libs.plugins.shadow)
@@ -9,6 +11,14 @@ version = project.property("appVersion") as String
 
 application {
     mainClass.set("cc.thevar.acc.ApplicationKt")
+}
+
+// Shadow plugin configuration
+tasks.named<ShadowJar>("shadowJar") {
+    archiveClassifier.set("all")
+    manifest {
+        attributes["Main-Class"] = "cc.thevar.acc.ApplicationKt"
+    }
 }
 
 tasks.register<Copy>("copyWasmFrontend") {

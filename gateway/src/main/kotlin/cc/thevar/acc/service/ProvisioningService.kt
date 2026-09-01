@@ -243,6 +243,11 @@ class ProvisioningService(
         }
     }
 
+    fun autoScale() {
+        logger.info("Hardware-aware auto-scaling initiated...")
+        // This will eventually re-trigger provisioning with updated hardware profiles
+    }
+
     override fun close() {
         activeJobs.values.forEach { it.cancel() }
         scope.cancel()
