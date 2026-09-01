@@ -4,7 +4,6 @@ import org.slf4j.LoggerFactory
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Paths
-import java.security.KeyStore
 
 class SystemBootstrapper(private val projectRoot: File) {
     private val logger = LoggerFactory.getLogger(javaClass)

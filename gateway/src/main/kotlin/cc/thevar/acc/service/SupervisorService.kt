@@ -3,10 +3,8 @@ package cc.thevar.acc.service
 import cc.thevar.acc.protocol.WorkerState
 import cc.thevar.acc.protocol.WorkerStatus
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.flow
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -30,19 +28,6 @@ class SupervisorService(private val projectRoot: File) : AutoCloseable {
                 checkWorkers()
                 delay(2000)
             }
-        }
-    }
-
-    fun getWorkerOutput(name: String): Flow<String> = flow {
-        val worker = workers[name] ?: return@flow
-        var lastEmitted = ""
-        while (currentCoroutineContext().isActive) {
-            val msg = worker.lastMsg
-            if (msg.isNotEmpty() && msg != lastEmitted) {
-                emit(msg)
-                lastEmitted = msg
-            }
-            delay(100)
         }
     }
 
@@ -75,10 +60,10 @@ class SupervisorService(private val projectRoot: File) : AutoCloseable {
                     .directory(projectRoot)
                     .redirectErrorStream(true)
                 
-                pb.environment().put("OLLAMA_MODELS", File(projectRoot, "data/ollama").absolutePath)
+                pb.environment()["OLLAMA_MODELS"] = File(projectRoot, "data/ollama").absolutePath
                 File(projectRoot, "data/ollama").mkdirs()
 
-                val process = pb.start()
+                pb.start()
                 registerWorker("ENGINE_OLLAMA", listOf("ollama", "serve"), restartPolicy = true)
                 // In this local mode, we'll wrap it in a ManagedWorker if we want status tracking
                 // For now, let's just start it and let ManagedWorker handle it if registered

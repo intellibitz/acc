@@ -8,12 +8,12 @@ import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.mockk.mockk
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 class ProvisioningServiceTest {
 
@@ -73,7 +73,7 @@ class ProvisioningServiceTest {
         // In a real test we'd use a more robust way to wait
         var attempts = 0
         while (service.updates.value["test-model"]?.stage != ProvisioningStage.COMPLETED && attempts < 10) {
-            kotlinx.coroutines.delay(100)
+            delay(100)
             attempts++
         }
 
