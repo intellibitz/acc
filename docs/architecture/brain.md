@@ -21,7 +21,7 @@ do deep thinking and fix root issues;
 do deep memory mapping of existing problems, and fix them one by one, until all problems fixed;
 do supervise and heal workers, making sure they are always running;
 do persist my thoughts on "stop" and resume on "start" via data/memory/;
-do my work, 100%.. no ifs and no buts;
+do my work, 100%. no ifs and no buts;
 do use all the tools that are available;
 do implement many features and functionalities together, but will complete each one of them 100%;
 do test, integrate, fix warnings and errors.

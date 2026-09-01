@@ -1,9 +1,5 @@
 package cc.thevar.acc.service
 
-import cc.thevar.acc.protocol.ConsoleLine
-import cc.thevar.acc.protocol.ProvisioningStage
-import cc.thevar.acc.protocol.ProvisioningUpdate
-import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.flow.toList
