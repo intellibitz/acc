@@ -1,19 +1,19 @@
 [versions]
 agp = "9.0.0"
-androidx-lifecycle = "2.10.0"
+androidx-lifecycle = "2.11.0"
 composeMultiplatform = "1.12.0"
 junit = "4.13.2"
-kotlin = "2.3.20"
+kotlin = "2.4.10"
 kotlin-wrappers = "2026.8.5"
 kotlinx-serialization = "1.8.0"
 kotlinx-coroutines = "1.11.0"
-koin = "4.0.1"
+koin = "4.2.2"
 koin-compose = "4.2.2"
 koin-compose-viewmodel = "4.0.0"
-ktor = "3.0.3"
+ktor = "3.5.2"
 logback = "1.6.3"
 mockk = "1.14.11"
-material3 = "1.7.3"
+material3 = "1.9.0"
 oshi = "6.6.3"
 bouncycastle = "1.84"
 
@@ -53,7 +53,7 @@ koin-logger-slf4j = { module = "io.insert-koin:koin-logger-slf4j", version.ref =
 koin-compose = { module = "io.insert-koin:koin-compose", version.ref = "koin-compose" }
 koin-compose-viewmodel = { module = "io.insert-koin:koin-compose-viewmodel", version.ref = "koin-compose-viewmodel" }
 koin-android = { module = "io.insert-koin:koin-android", version.ref = "koin" }
-kotlinx-io = { module = "org.jetbrains.kotlinx:kotlinx-io-core", version = "0.6.0" }
+kotlinx-io = { module = "org.jetbrains.kotlinx:kotlinx-io-core", version = "0.9.1" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 wrappers-browser = { module = "org.jetbrains.kotlin-wrappers:kotlin-browser", version.ref = "kotlin-wrappers" }
 
@@ -66,4 +66,4 @@ kotlinJvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 ktor = { id = "io.ktor.plugin", version.ref = "ktor" }
-shadow = { id = "com.gradleup.shadow", version = "8.3.5" }
+shadow = { id = "com.gradleup.shadow", version = "9.6.1" }
