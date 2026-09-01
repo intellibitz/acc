@@ -5,20 +5,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import java.io.File
 
 class CommandHandler(
     private val projectRoot: File,
     private val provisioningService: ProvisioningService
 ) {
-    private val allowedExternalCommands = setOf("up", "sync", "auto-scale", "benchmark", "prune")
-
     fun handleCommand(commandLine: String): Flow<ConsoleLine> = flow {
         val parts = commandLine.trim().split(" ")
         val baseCommand = parts.firstOrNull() ?: return@flow
-        val args = parts.drop(1)
 
         emit(ConsoleLine("$ acc $commandLine", "COMMAND"))
 
