@@ -44,7 +44,7 @@ data class ModelManifest(
 
 @Serializable
 enum class ProvisioningStage {
-    IDLE, SCANNING, DOWNLOADING, MERGING, REGISTERING, COMPLETED, ERROR
+    IDLE, SCANNING, DOWNLOADING, REGISTERING, COMPLETED, ERROR
 }
 
 @Serializable

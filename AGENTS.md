@@ -53,7 +53,7 @@ The server and web frontend will be served at `http://localhost:8080`.
 
 ## 🛠️ Development Guidelines
 - **Koin first**: Avoid global singletons. Inject dependencies via constructors or Koin DSL.
-- **Lifecycle Management**: Core services (Supervisor, Provisioning, Monitoring) implement `AutoCloseable`. Always ensure background coroutines and processes are cancelled on `close()`.
+- **Lifecycle Management**: Core services (Supervisor, Provisioning, Monitoring) implement `AutoCloseable`. Always ensure background coroutines and processes are canceled on `close()`.
 - **Stay Modular**: When adding new features to the Gateway, create a new `Routes` file or Service instead of bloating `Application.kt`.
 - **Structured Logging**: Use **SLF4J** (`LoggerFactory.getLogger(javaClass)`) instead of `println`.
 - **Zero Silent Failures**: Never use empty `catch` blocks. Log errors at the appropriate level (WARN/ERROR).

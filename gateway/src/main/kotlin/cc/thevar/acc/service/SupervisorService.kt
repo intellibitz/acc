@@ -3,14 +3,13 @@ package cc.thevar.acc.service
 import cc.thevar.acc.protocol.WorkerState
 import cc.thevar.acc.protocol.WorkerStatus
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.flow
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import kotlin.time.Duration.Companion.seconds
 
 class SupervisorService(private val projectRoot: File) : AutoCloseable {
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -28,21 +27,8 @@ class SupervisorService(private val projectRoot: File) : AutoCloseable {
         scope.launch {
             while (isActive) {
                 checkWorkers()
-                delay(2000)
+                delay(2.seconds)
             }
-        }
-    }
-
-    fun getWorkerOutput(name: String): Flow<String> = flow {
-        val worker = workers[name] ?: return@flow
-        var lastEmitted = ""
-        while (currentCoroutineContext().isActive) {
-            val msg = worker.lastMsg
-            if (msg.isNotEmpty() && msg != lastEmitted) {
-                emit(msg)
-                lastEmitted = msg
-            }
-            delay(100)
         }
     }
 
@@ -51,7 +37,7 @@ class SupervisorService(private val projectRoot: File) : AutoCloseable {
     }
 
     fun spawnAgent(agentName: String, model: String, apiBase: String? = null) {
-        logger.info("Spawning Kotlin-native agent: {} for model: {}", agentName, model)
+        logger.info("Spawning Kotlin-native agent: {} for model: {} (API: {})", agentName, model, apiBase ?: "Default")
         // In this new architecture, agents are services, not separate processes.
         // We can track them here if needed, or just let the AgentService handle requests.
     }
@@ -75,10 +61,10 @@ class SupervisorService(private val projectRoot: File) : AutoCloseable {
                     .directory(projectRoot)
                     .redirectErrorStream(true)
                 
-                pb.environment().put("OLLAMA_MODELS", File(projectRoot, "data/ollama").absolutePath)
+                pb.environment()["OLLAMA_MODELS"] = File(projectRoot, "data/ollama").absolutePath
                 File(projectRoot, "data/ollama").mkdirs()
 
-                val process = pb.start()
+                pb.start()
                 registerWorker("ENGINE_OLLAMA", listOf("ollama", "serve"), restartPolicy = true)
                 // In this local mode, we'll wrap it in a ManagedWorker if we want status tracking
                 // For now, let's just start it and let ManagedWorker handle it if registered

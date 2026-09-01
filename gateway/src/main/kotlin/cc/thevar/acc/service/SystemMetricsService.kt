@@ -1,13 +1,10 @@
 package cc.thevar.acc.service
 
 import cc.thevar.acc.protocol.*
-import org.slf4j.LoggerFactory
 import oshi.SystemInfo
-import oshi.hardware.GraphicsCard
 import java.io.File
 
 class SystemMetricsService(private val projectRoot: File) {
-    private val logger = LoggerFactory.getLogger(javaClass)
     private val si = SystemInfo()
     private val hardware = si.hardware
     private val cpu = hardware.processor

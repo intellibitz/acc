@@ -7,7 +7,6 @@ import io.ktor.client.statement.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.*
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
 import org.slf4j.LoggerFactory
 import java.io.File
@@ -99,7 +98,7 @@ class MonitoringService(
                         workers = supervisorService.workerStates.value,
                         provisioning = provisioningService.updates.value.values.toList(),
                         proxyOnline = false,
-                        engineOnline = installedModels.isNotEmpty() || runningModels.isNotEmpty() || true,
+                        engineOnline = installedModels.isNotEmpty() || runningModels.isNotEmpty(),
                         statusMsg = sessionManager.systemStatusMsg
                     )
 
