@@ -49,7 +49,8 @@ fun incrementVersion(version: String, isTest: Boolean): String {
 
 tasks.register("releaseTest") {
     group = "publishing"
-    description = "Increments version for test and pushes tag to GitHub."
+    description = "Syncs work, increments version for test and pushes tag to GitHub."
+    dependsOn("syncToGitHub")
     val propsFile = layout.projectDirectory.file("gradle.properties").asFile
     doLast {
         val props = Properties()
@@ -76,7 +77,8 @@ tasks.register("releaseTest") {
 
 tasks.register("releaseProduction") {
     group = "publishing"
-    description = "Increments version for production and pushes tag to GitHub."
+    description = "Syncs work, increments version for production and pushes tag to GitHub."
+    dependsOn("syncToGitHub")
     val propsFile = layout.projectDirectory.file("gradle.properties").asFile
     doLast {
         val props = Properties()
@@ -145,17 +147,50 @@ tasks.register<Exec>("githubOpen") {
     commandLine("gh", "repo", "view", "--web")
 }
 
+tasks.register<Exec>("githubFeature") {
+    group = "github"
+    description = "Syncs current work, then creates a new timestamped feature branch and pushes it to origin."
+    dependsOn("syncToGitHub")
+    val suffix = if (project.hasProperty("name")) "-${project.property("name")}" else ""
+    val script = """
+        BRANCH_NAME="feature/${'$'}(date +%Y%m%d-%H%M%S)$suffix"
+        git checkout -b "${'$'}BRANCH_NAME"
+        git push -u origin "${'$'}BRANCH_NAME"
+    """.trimIndent()
+    commandLine("bash", "-c", script)
+}
+
+tasks.register<Exec>("githubMain") {
+    group = "github"
+    description = "Syncs current work, then switches back to the 'main' branch and pulls latest from origin."
+    dependsOn("syncToGitHub")
+    commandLine("bash", "-c", "git checkout main && git fetch origin main && git reset --hard origin/main")
+}
+
 tasks.register<Exec>("githubPR") {
     group = "github"
-    description = "Creates a Pull Request for the current branch to 'main'."
+    description = "Syncs current work, then creates a Pull Request for the current branch to 'main'."
+    dependsOn("syncToGitHub")
     commandLine("gh", "pr", "create", "--fill")
 }
 
 tasks.register<Exec>("githubMerge") {
     group = "github"
-    description = "Syncs all changes, then merges the current PR to 'main' automatically after checks pass."
+    description = "Syncs all changes, then merges the current PR to 'main' automatically (requires 'Allow auto-merge' in repo settings)."
     dependsOn("syncToGitHub")
     commandLine("gh", "pr", "merge", "--auto", "--squash", "--delete-branch")
+}
+
+tasks.register<Exec>("githubMergeAll") {
+    group = "github"
+    description = "Attempts to merge ALL open Pull Requests automatically (requires 'Allow auto-merge' in repo settings)."
+    commandLine("bash", "-c", "gh pr list --json number -q '.[].number' | xargs -I {} gh pr merge {} --auto --squash --delete-branch")
+}
+
+tasks.register<Exec>("githubSetup") {
+    group = "github"
+    description = "Configures the GitHub repository settings for the optimal ACC workflow (Auto-merge, branch deletion, etc)."
+    commandLine("gh", "repo", "edit", "--enable-auto-merge", "--delete-branch-on-merge", "--allow-update-branch", "--enable-squash-merge")
 }
 
 tasks.register<Exec>("githubChecks") {
