@@ -151,6 +151,13 @@ tasks.register<Exec>("githubPR") {
     commandLine("gh", "pr", "create", "--fill")
 }
 
+tasks.register<Exec>("githubMerge") {
+    group = "github"
+    description = "Syncs all changes, then merges the current PR to 'main' automatically after checks pass."
+    dependsOn("syncToGitHub")
+    commandLine("gh", "pr", "merge", "--auto", "--squash", "--delete-branch")
+}
+
 tasks.register<Exec>("githubChecks") {
     group = "github"
     description = "Displays the status of GitHub Action checks for the current branch."
