@@ -174,15 +174,31 @@ tasks.register<Exec>("githubPR") {
 
 tasks.register<Exec>("githubMerge") {
     group = "github"
-    description = "Syncs all changes, then merges the current PR to 'main' automatically (requires 'Allow auto-merge' in repo settings)."
+    description = "Updates the PR branch from main, then merges it automatically (requires 'Allow auto-merge' in repo settings)."
     dependsOn("githubPR")
-    commandLine("gh", "pr", "merge", "--auto", "--squash", "--delete-branch")
+    val script = """
+        PR_NUM=$(gh pr view --json number -q .number)
+        echo "Updating and merging PR #${'$'}PR_NUM..."
+        gh pr update-branch "${'$'}PR_NUM" || echo "Note: Branch update skipped or failed."
+        gh pr merge "${'$'}PR_NUM" --auto --squash --delete-branch
+    """.trimIndent()
+    commandLine("bash", "-c", script)
 }
 
 tasks.register<Exec>("githubMergeAll") {
     group = "github"
-    description = "Attempts to merge ALL open Pull Requests automatically (requires 'Allow auto-merge' in repo settings)."
-    commandLine("bash", "-c", "gh pr list --json number -q '.[].number' | xargs -I {} gh pr merge {} --auto --squash --delete-branch")
+    description = "Attempts to update and merge ALL open Pull Requests automatically."
+    val script = """
+        gh pr list --json number -q '.[].number' | while read -r pr; do
+          echo "Processing PR #${'$'}pr..."
+          # 1. Update branch from main (resolves out-of-date/stale failures)
+          gh pr update-branch "${'$'}pr" || echo "Note: Branch update skipped or failed for #${'$'}pr"
+          
+          # 2. Enable auto-merge
+          gh pr merge "${'$'}pr" --auto --squash --delete-branch
+        done
+    """.trimIndent()
+    commandLine("bash", "-c", script)
 }
 
 tasks.register<Exec>("githubFixAll") {
