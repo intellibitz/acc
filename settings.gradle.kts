@@ -8,6 +8,16 @@ pluginManagement {
     }
 }
 
+buildscript {
+    dependencies {
+        constraints {
+            classpath("org.bouncycastle:bcprov-jdk18on:1.84") {
+                because("CVE-2024-34447")
+            }
+        }
+    }
+}
+
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
     repositories {

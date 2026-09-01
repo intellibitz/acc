@@ -37,6 +37,15 @@ We use a semi-automated release system triggered by Gradle and completed by GitH
   - Tags and pushes to GitHub.
   - Triggers a **Full Release** on GitHub.
 
+### GitHub Creator Tasks:
+Maintainers can use these specialized tasks to interact with the repository:
+- **Open Repo**: `./gradlew githubOpen` (Opens browser)
+- **Create PR**: `./gradlew githubPR` (Automates `--fill` PR creation)
+- **Check Status**: `./gradlew githubChecks` (Watches CI check progress)
+- **Manage Issues**: `./gradlew githubIssues` (Lists current issues)
+- **View Actions**: `./gradlew githubActions` (Opens Actions tab)
+- **Wiki**: `./gradlew githubWiki` (Opens Wiki)
+
 ### Deployment for Pilots:
 Users can simply download the `acc-gateway-x.y.z.jar` from the GitHub Release and run:
 `java -jar acc-gateway-x.y.z.jar`

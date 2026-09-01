@@ -23,8 +23,10 @@ logback = "1.6.3"
 mockk = "1.13.12"
 material3 = "1.7.3"
 oshi = "6.6.3"
+bouncycastle = "1.84"
 
 [libraries]
+bouncycastle-bcprov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
 oshi-core = { module = "com.github.oshi:oshi-core", version.ref = "oshi" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 kotlin-testJunit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
