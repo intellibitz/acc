@@ -109,9 +109,32 @@ tasks.register<Exec>("pushToGitHub") {
 
 tasks.register<Exec>("syncToGitHub") {
     group = "publishing"
-    description = "Automatically adds, commits (generic message), and pushes all changes to GitHub."
-    // We use bash to chain commands and handle the 'nothing to commit' case gracefully
-    commandLine("bash", "-c", "git add . && (git commit -m 'chore: automated sync to GitHub' || true) && git push origin HEAD")
+    description = "Automatically adds, commits, and pushes all changes to GitHub (handles protected main branch)."
+    val script = """
+        CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+        git add .
+        if ! git diff --cached --quiet; then
+          git commit -m 'chore: automated sync to GitHub' || true
+        fi
+
+        if [ "${'$'}CURRENT_BRANCH" = "main" ]; then
+          SYNC_BRANCH="sync/${'$'}(date +%Y%m%d-%H%M%S)"
+          echo "On main branch. Creating sync branch: ${'$'}SYNC_BRANCH"
+          git checkout -b "${'$'}SYNC_BRANCH"
+          git push -u origin "${'$'}SYNC_BRANCH"
+          if command -v gh >/dev/null 2>&1; then
+            gh pr create --fill || echo "PR creation failed (maybe it already exists or no changes)"
+          else
+            echo "gh CLI not found, skipping PR creation."
+          fi
+          git checkout main
+          git fetch origin main
+          git reset --hard origin/main
+        else
+          git push origin HEAD
+        fi
+    """.trimIndent()
+    commandLine("bash", "-c", script)
 }
 
 // --- GitHub Creator Tasks ---
