@@ -11,17 +11,26 @@ class SystemMetricsService(private val projectRoot: File) {
     private val memory = hardware.memory
     
     private var prevTicks = cpu.systemCpuLoadTicks
+    private var cachedDiskUsage = "0B"
+    private var lastDiskCheck = 0L
+    private val diskCheckInterval = 60_000L // 1 minute
 
     fun getSystemStats(): SystemStats {
         val cpuLoad = cpu.getSystemCpuLoadBetweenTicks(prevTicks) * 100.0
         prevTicks = cpu.systemCpuLoadTicks
+        
+        val now = System.currentTimeMillis()
+        if (now - lastDiskCheck > diskCheckInterval) {
+            cachedDiskUsage = getFleetDiskUsage()
+            lastDiskCheck = now
+        }
         
         return SystemStats(
             cpuUtilization = cpuLoad.toFloat().coerceIn(0f, 100f),
             ramUsed = ((memory.total - memory.available) / (1024.0 * 1024.0 * 1024.0)).toFloat(),
             ramTotal = (memory.total / (1024.0 * 1024.0 * 1024.0)).toFloat(),
             gpu = getGpuStats(),
-            diskUsage = getFleetDiskUsage()
+            diskUsage = cachedDiskUsage
         )
     }
 
