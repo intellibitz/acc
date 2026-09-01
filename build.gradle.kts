@@ -1,5 +1,15 @@
 import java.util.Properties
 
+buildscript {
+    dependencies {
+        constraints {
+            classpath("org.bouncycastle:bcprov-jdk18on:1.84") {
+                because("CVE-2024-34447")
+            }
+        }
+    }
+}
+
 plugins {
     // this is necessary to avoid the plugins to be loaded multiple times
     // in each subproject's classloader
