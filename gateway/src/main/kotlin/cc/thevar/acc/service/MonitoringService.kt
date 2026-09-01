@@ -98,7 +98,7 @@ class MonitoringService(
                         workers = supervisorService.workerStates.value,
                         provisioning = provisioningService.updates.value.values.toList(),
                         proxyOnline = false,
-                        engineOnline = installedModels.isNotEmpty() || runningModels.isNotEmpty() || true,
+                        engineOnline = installedModels.isNotEmpty() || runningModels.isNotEmpty(),
                         statusMsg = sessionManager.systemStatusMsg
                     )
 

@@ -1,23 +1,3 @@
-*.iml
-.kotlin
-.gradle
-**/build/
-xcuserdata
-!src/**/build/
-local.properties
-.idea
-.DS_Store
-captures
-.externalNativeBuild
-.cxx
-*.xcodeproj/*
-!*.xcodeproj/project.pbxproj
-!*.xcodeproj/xcshareddata/
-!*.xcodeproj/project.xcworkspace/
-!*.xcworkspace/contents.xcworkspacedata
-**/xcshareddata/WorkspaceSettings.xcsettings
-node_modules/
-
 # AI Command Center (acc) - Professional Git Ignore
 
 # System & OS
@@ -27,47 +7,47 @@ Thumbs.db
 *.pid
 *.lock
 .initialized
+xcuserdata
+
+# IntelliJ / Android Studio / IDE
+.idea/
+*.iml
+.kotlin/
+.navigation/
+captures/
+Captures/
+
+# Build & Dependencies
+.gradle/
+**/build/
+/build/
+local.properties
+node_modules/
+kotlin-js-store/
+.artifacts/
+.externalNativeBuild
+.cxx
+
+# iOS Specific
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+!*.xcodeproj/project.xcworkspace/
+!*.xcworkspace/contents.xcworkspacedata
+**/xcshareddata/WorkspaceSettings.xcsettings
 
 # Data & Blobs (Large files stored locally)
 .cache/
+/.cache/
 downloads/
 optimizations/
 archives/
 data/
+/data/
 logs/
-
-# Android Specific
-.gradle/
-build/
-local.properties
-Captures/
-*.apk
-*.aar
-*.iml
-.navigation/
-
-# IntelliJ / Android Studio
-.idea/usage.statistics.xml
-.idea/librarySources.xml
-.idea/shelf/
-.idea/workspace.xml
-.idea/navEditor.xml
-.idea/caches/
-.idea/libraries/
-.idea/modules.xml
-.idea/deploymentTargetSelector.xml
-.idea/deploymentTargetDropDown.xml
-.idea/AndroidProjectSystem.xml
-.idea/appInsightsSettings.xml
-.idea/compiler.xml
-.idea/externalDependencies.xml
-.idea/gradle.xml
-.idea/kotlinc.xml
-.idea/misc.xml
-.idea/planningMode.xml
-.idea/vcs.xml
-.idea/assetWizardSettings.xml
-.idea/modules/
+/logs/
+registry/
+/registry/
 
 # Models & Manifests
 *.gguf
@@ -80,20 +60,12 @@ fleet.conf.local
 private_fleet.conf
 config/private_fleet.conf
 
-# Sandbox Data
-/data/
-/logs/
-/registry/
-/.cache/
+# Python / Virtual Environments
+.venv/
 /.venv/
-/gateway/build/
-/frontend/*/build/
 
 # Test environments
 /test_acc_environment/
 /test/
-
-# Kotlin / Build specific
-kotlin-js-store/
-.artifacts/
-/build/
+/frontend/*/build/
+/gateway/build/

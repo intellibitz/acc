@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import kotlin.time.Duration.Companion.seconds
 
 class SupervisorService(private val projectRoot: File) : AutoCloseable {
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -26,7 +27,7 @@ class SupervisorService(private val projectRoot: File) : AutoCloseable {
         scope.launch {
             while (isActive) {
                 checkWorkers()
-                delay(2000)
+                delay(2.seconds)
             }
         }
     }
@@ -36,7 +37,7 @@ class SupervisorService(private val projectRoot: File) : AutoCloseable {
     }
 
     fun spawnAgent(agentName: String, model: String, apiBase: String? = null) {
-        logger.info("Spawning Kotlin-native agent: {} for model: {}", agentName, model)
+        logger.info("Spawning Kotlin-native agent: {} for model: {} (API: {})", agentName, model, apiBase ?: "Default")
         // In this new architecture, agents are services, not separate processes.
         // We can track them here if needed, or just let the AgentService handle requests.
     }
