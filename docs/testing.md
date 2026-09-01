@@ -47,7 +47,7 @@ To run:
 ```
 
 ## 🚀 Service & Provisioning Tests
-Unit tests for core service logic, including hardware-aware layer calculation and fleet management.
+Unit tests for core service logic, including hardware-aware layer calculation and fleet management. These tests also verify correct resource disposal and coroutine cancellation via `AutoCloseable` implementation.
 Located in `:gateway:src:test:kotlin:cc.thevar.acc.service.ProvisioningServiceTest`.
 
 To run:

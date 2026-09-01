@@ -4,9 +4,9 @@ import cc.thevar.acc.protocol.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.collect
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
+import org.slf4j.LoggerFactory
 import java.io.File
 
 class MonitoringService(
@@ -14,7 +14,8 @@ class MonitoringService(
     private val supervisorService: SupervisorService,
     private val provisioningService: ProvisioningService,
     private val sessionManager: SessionManager
-) {
+) : AutoCloseable {
+    private val logger = LoggerFactory.getLogger(javaClass)
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     fun start(applicationScope: CoroutineScope) {
@@ -40,6 +41,7 @@ class MonitoringService(
                     sessionManager.systemStatusMsg = "Acc Ready."
                 } catch (e: Exception) {
                     sessionManager.systemStatusMsg = "Initialization Error: ${e.message}"
+                    logger.error("Initialization error: {}", e.message, e)
                 }
             }
         } else {
@@ -71,7 +73,9 @@ class MonitoringService(
 
                         broadcast(Frame.Text(Json.encodeToString(fullState)), sessionManager.systemSessions + sessionManager.uiSessions)
                     }
-                } catch (e: Exception) { }
+                } catch (e: Exception) {
+                    logger.debug("Parsing error in metrics stream (possibly partial line): {}", e.message)
+                }
             }
         }
 
@@ -95,8 +99,15 @@ class MonitoringService(
             session.launch {
                 try {
                     session.send(frame)
-                } catch (e: Exception) { }
+                } catch (e: Exception) {
+                    logger.debug("Failed to broadcast frame to session: {}", e.message)
+                }
             }
         }
+    }
+
+    override fun close() {
+        logger.info("Closing MonitoringService...")
+        scope.cancel("MonitoringService closing")
     }
 }

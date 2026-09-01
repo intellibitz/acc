@@ -10,6 +10,7 @@ import io.ktor.websocket.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
+import cc.thevar.acc.getPlatform
 
 class SystemViewModel : ViewModel() {
     private val _state = MutableStateFlow<SystemState?>(null)
@@ -19,7 +20,7 @@ class SystemViewModel : ViewModel() {
         install(WebSockets)
     }
 
-    fun connect(host: String = "localhost", port: Int = 8333) {
+    fun connect(host: String = getPlatform().defaultGatewayHost, port: Int = 8333) {
         viewModelScope.launch {
             try {
                 // Try secure first

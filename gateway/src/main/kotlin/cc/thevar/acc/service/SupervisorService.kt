@@ -7,10 +7,13 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
+import org.slf4j.LoggerFactory
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 
-class SupervisorService(private val projectRoot: File) {
+class SupervisorService(private val projectRoot: File) : AutoCloseable {
+    private val logger = LoggerFactory.getLogger(javaClass)
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val workers = ConcurrentHashMap<String, ManagedWorker>()
     
@@ -68,19 +71,23 @@ class SupervisorService(private val projectRoot: File) {
     fun startEngine(provider: String) {
         scope.launch {
             try {
-                println("[Supervisor] Starting engine provider: $provider")
+                logger.info("Starting engine provider: {}", provider)
                 val process = ProcessBuilder("docker", "compose", "up", "-d", provider)
                     .directory(projectRoot)
                     .redirectErrorStream(true)
                     .start()
                 
                 process.inputStream.bufferedReader().useLines { lines ->
-                    lines.forEach { println("[Docker] $it") }
+                    lines.forEach { logger.info("[Docker] {}", it) }
                 }
-                process.waitFor()
-                println("[Supervisor] Engine provider $provider started.")
+                val exitCode = process.waitFor()
+                if (exitCode == 0) {
+                    logger.info("Engine provider {} started.", provider)
+                } else {
+                    logger.warn("Engine provider {} failed with exit code {}", provider, exitCode)
+                }
             } catch (e: Exception) {
-                println("[Supervisor] Failed to start engine $provider: ${e.message}")
+                logger.error("Failed to start engine {}: {}", provider, e.message, e)
             }
         }
     }
@@ -93,6 +100,12 @@ class SupervisorService(private val projectRoot: File) {
         workers.values.forEach { it.stop() }
     }
 
+    override fun close() {
+        logger.info("Closing SupervisorService, stopping all workers...")
+        stopAll()
+        scope.cancel("SupervisorService closing")
+    }
+
     private fun checkWorkers() {
         val states = workers.values.map { it.updateState() }
         _workerStates.value = states
@@ -100,7 +113,7 @@ class SupervisorService(private val projectRoot: File) {
         // Auto-heal
         workers.values.forEach { worker ->
             if (worker.shouldRestart()) {
-                println("[Supervisor] Worker ${worker.name} crashed. Restarting...")
+                logger.warn("Worker {} crashed. Restarting...", worker.name)
                 worker.start()
             }
         }
@@ -149,7 +162,14 @@ class SupervisorService(private val projectRoot: File) {
 
         fun stop() {
             logJob?.cancel()
-            process?.destroy()
+            process?.let {
+                logger.info("Stopping worker {}: Sending SIGTERM...", name)
+                it.destroy()
+                if (!it.waitFor(5, TimeUnit.SECONDS)) {
+                    logger.warn("Worker {} failed to stop gracefully. Sending SIGKILL...", name)
+                    it.destroyForcibly()
+                }
+            }
             status = WorkerStatus.STOPPED
         }
 

@@ -14,6 +14,7 @@ import kotlinx.serialization.json.Json
 import org.koin.ktor.ext.inject
 import org.koin.ktor.plugin.Koin
 import org.koin.logger.slf4jLogger
+import org.slf4j.LoggerFactory
 import java.io.File
 import java.security.KeyStore
 import kotlin.time.Duration.Companion.seconds
@@ -34,10 +35,11 @@ private fun findProjectRoot(): File {
 }
 
 val projectRoot = findProjectRoot()
+private val logger = LoggerFactory.getLogger("cc.thevar.acc.Main")
 
 fun main() {
-    println("[Manager] Starting from: ${System.getProperty("user.dir")}")
-    println("[Manager] Detected Project Root: ${projectRoot.absolutePath}")
+    logger.info("Starting from: {}", System.getProperty("user.dir"))
+    logger.info("Detected Project Root: {}", projectRoot.absolutePath)
 
     val keyStoreFile = File(projectRoot, "config/keystore.p12")
     val httpPort = 8333
@@ -90,6 +92,11 @@ fun Application.module() {
 
     val monitoringService by inject<MonitoringService>()
     monitoringService.start(this)
+
+    monitor.subscribe(ApplicationStopped) {
+        logger.info("Application stopping, closing Koin context...")
+        // Koin for Ktor usually handles this, but let's be explicit if needed
+    }
 
     configureRouting()
 }

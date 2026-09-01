@@ -8,10 +8,11 @@ Welcome to the **acc** codebase. This project uses a modern, modular architectur
   - Frontend: Shared ViewModels in `CommonModule.kt`.
 - **Control Plane (Gateway)**: A modular Ktor server.
   - `Routing.kt`: Modular route definitions.
-  - `MonitoringService.kt`: Real-time metrics and WebSocket management.
-  - `ProvisioningService.kt`: Model downloads and registration.
+  - `MonitoringService.kt`: Lifecycle-aware metrics and WebSocket management.
+  - `ProvisioningService.kt`: Resource-safe model downloads and registration.
 - **Frontend (Deck)**: Compose Multiplatform.
   - Responsive layouts in `App.kt` with breakpoints for Desktop/Mobile.
+  - **Platform-Aware Host Discovery**: The `Platform` interface provides default gateway hosts (e.g., `10.0.2.2` for Android emulators, `window.location.hostname` for Web).
   - Type-safe communication via shared `:common` protocols.
 
 ## 🧪 Testing Strategy
@@ -24,9 +25,11 @@ We follow a multi-layered testing approach. Detailed documentation can be found 
 
 ## 🛠️ Development Guidelines
 - **Koin first**: Avoid global singletons. Inject dependencies via constructors or Koin DSL.
+- **Lifecycle Management**: Core services (Supervisor, Provisioning, Monitoring) implement `AutoCloseable`. Always ensure background coroutines and processes are cancelled on `close()`.
 - **Stay Modular**: When adding new features to the Gateway, create a new `Routes` file or Service instead of bloating `Application.kt`.
-- **Test-Driven**: Always add unit tests for new business logic in `ProvisioningService` or `FleetManager`.
-- **Responsive UI**: Use `BoxWithConstraints` or `AdaptiveNavigationSuite` (when stable) to ensure the UI works across all form factors.
+- **Structured Logging**: Use **SLF4J** (`LoggerFactory.getLogger(javaClass)`) instead of `println`.
+- **Zero Silent Failures**: Never use empty `catch` blocks. Log errors at the appropriate level (WARN/ERROR).
+- **Test-Driven**: Always add unit tests for new business logic.
 
 ---
 *Maintained by the AI Command Center Architects.*

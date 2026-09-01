@@ -12,6 +12,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.json.*
+import org.slf4j.LoggerFactory
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.time.LocalDateTime
@@ -26,7 +27,8 @@ class ProvisioningService(
         }
     },
     private val ollamaHost: String = System.getenv("OLLAMA_HOST") ?: "http://localhost:11434"
-) {
+) : AutoCloseable {
+    private val logger = LoggerFactory.getLogger(javaClass)
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val _updates = MutableStateFlow<Map<String, ProvisioningUpdate>>(emptyMap())
     val updates = _updates.asStateFlow()
@@ -61,7 +63,7 @@ class ProvisioningService(
                         jsonElement["sha"]?.jsonPrimitive?.content ?: ""
                     } else ""
                 } catch (e: Exception) {
-                    println("Failed to fetch remote SHA for ${model.name}: ${e.message}")
+                    logger.warn("Failed to fetch remote SHA for {}: {}", model.name, e.message)
                     ""
                 }
 
@@ -74,7 +76,7 @@ class ProvisioningService(
                         models.any { it.jsonObject["name"]?.jsonPrimitive?.content?.startsWith(model.name) ?: false }
                     } else false
                 } catch (e: Exception) {
-                    println("Failed to check Ollama status for ${model.name}: ${e.message}")
+                    logger.warn("Failed to check Ollama status for {}: {}", model.name, e.message)
                     false
                 }
 
@@ -211,7 +213,7 @@ class ProvisioningService(
                     
                     installed.forEach { model ->
                         if (model.isNotEmpty() && !fleet.contains(model)) {
-                            println("[Prune] Removing unmanaged model: $model")
+                            logger.info("[Prune] Removing unmanaged model: {}", model)
                             client.delete("$ollamaHost/api/delete") {
                                 contentType(io.ktor.http.ContentType.Application.Json)
                                 setBody(buildJsonObject { put("name", model) })
@@ -221,9 +223,9 @@ class ProvisioningService(
                 }
                 
                 File(projectRoot, ".cache").listFiles()?.forEach { it.deleteRecursively() }
-                println("[Prune] Fleet pruned and disk space reclaimed.")
+                logger.info("[Prune] Fleet pruned and disk space reclaimed.")
             } catch (e: Exception) {
-                println("[Prune] Error during prune: ${e.message}")
+                logger.error("[Prune] Error during prune: {}", e.message, e)
             }
         }
     }
@@ -237,9 +239,9 @@ class ProvisioningService(
                 if (file.isFile) file.copyTo(File(backupDir, file.name))
             }
             File(projectRoot, "registry").copyRecursively(File(backupDir, "registry"), overwrite = true)
-            println("[Backup] Configuration backed up to ${backupDir.absolutePath}")
+            logger.info("[Backup] Configuration backed up to {}", backupDir.absolutePath)
         } catch (e: Exception) {
-            println("[Backup] Error: ${e.message}")
+            logger.error("[Backup] Error: {}", e.message, e)
         }
     }
 
@@ -250,7 +252,9 @@ class ProvisioningService(
                 try {
                     val process = ProcessBuilder("nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits").start()
                     vram = process.inputStream.bufferedReader().readLine()?.trim()?.toInt() ?: 0
-                } catch (e: Exception) {}
+                } catch (e: Exception) {
+                    logger.debug("[AutoScale] nvidia-smi failed or not present: {}", e.message)
+                }
 
                 val ram = (Runtime.getRuntime().maxMemory() / (1024 * 1024 * 1024)).toInt() // GB approximate
                 
@@ -259,10 +263,17 @@ class ProvisioningService(
                     vram >= 16000 -> "STRONG"
                     else -> "FAST"
                 }
-                println("[AutoScale] VRAM: ${vram}MB | RAM: ${ram}GB | Target Tier: $tier")
+                logger.info("[AutoScale] VRAM: {}MB | RAM: {}GB | Target Tier: {}", vram, ram, tier)
             } catch (e: Exception) {
-                println("[AutoScale] Error: ${e.message}")
+                logger.error("[AutoScale] Error: {}", e.message, e)
             }
         }
+    }
+
+    override fun close() {
+        logger.info("Closing ProvisioningService, cancelling active jobs...")
+        activeJobs.values.forEach { it.cancel() }
+        scope.cancel("ProvisioningService closing")
+        client.close()
     }
 }

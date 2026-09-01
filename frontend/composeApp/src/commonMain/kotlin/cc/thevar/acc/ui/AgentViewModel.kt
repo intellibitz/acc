@@ -13,6 +13,7 @@ import io.ktor.websocket.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
+import cc.thevar.acc.getPlatform
 
 class AgentViewModel : ViewModel() {
     private val _messages = MutableStateFlow<List<AgentMessage>>(emptyList())
@@ -27,7 +28,7 @@ class AgentViewModel : ViewModel() {
         }
     }
 
-    fun connect(host: String = "localhost", port: Int = 8333) {
+    fun connect(host: String = getPlatform().defaultGatewayHost, port: Int = 8333) {
         viewModelScope.launch {
             try {
                 // Try secure first

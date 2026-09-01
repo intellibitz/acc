@@ -119,10 +119,10 @@ The `acc` script acts as a smart dispatcher for your workstation:
 
 acc is built like a production container orchestrator:
 
-- **Modular Control Plane**: The Gateway uses **Koin Dependency Injection** to manage lifecycle and service discovery, ensuring high testability and clean code.
+- **Modular Control Plane**: The Gateway uses **Koin Dependency Injection** and **AutoCloseable** service lifecycles to ensure high testability, clean resource management, and zero "zombie" processes.
 - **API Orchestration**: All model management is handled via secure HTTP APIs to engines (Ollama/vLLM), rather than brittle CLI calls.
-- **Real-time Telemetry**: A dedicated `MonitoringService` manages WebSocket streams, ensuring metrics reach the UI with sub-millisecond latency.
-- **Auto-Heal**: If a metrics bridge or agent crashes, the Manager automatically detects and restarts it.
+- **Resilient Telemetry**: A dedicated `MonitoringService` manages WebSocket streams with structured error handling and SLF4J logging, ensuring metrics reach the UI reliably.
+- **Auto-Heal & Forced Kill**: If a worker crashes, the Manager restarts it. Unresponsive workers are forcibly terminated to reclaim system resources.
 - **Console Sandbox**: The terminal interface is strictly restricted to non-privileged orchestration
   tasks. Sensitive operations like `setup` or `tune-hw` are host-only to prevent unauthorized system
   modification.

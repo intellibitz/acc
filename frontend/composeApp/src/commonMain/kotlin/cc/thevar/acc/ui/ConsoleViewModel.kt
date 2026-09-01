@@ -9,6 +9,7 @@ import io.ktor.websocket.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
+import cc.thevar.acc.getPlatform
 
 class ConsoleViewModel : ViewModel() {
     private val _lines = MutableStateFlow<List<ConsoleLine>>(emptyList())
@@ -19,7 +20,7 @@ class ConsoleViewModel : ViewModel() {
     }
     private var session: DefaultClientWebSocketSession? = null
 
-    fun connect(host: String = "localhost", port: Int = 8333) {
+    fun connect(host: String = getPlatform().defaultGatewayHost, port: Int = 8333) {
         viewModelScope.launch {
             try {
                 // Try secure first
