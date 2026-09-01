@@ -131,6 +131,8 @@ tasks.register<Exec>("githubSync") {
           git fetch origin main
           git reset --hard origin/main
         else
+          echo "On feature branch. Syncing with remote..."
+          git pull --rebase origin "${'$'}CURRENT_BRANCH" || echo "Rebase failed, manual resolution required."
           git push origin HEAD
         fi
     """.trimIndent()
@@ -187,16 +189,29 @@ tasks.register<Exec>("githubMerge") {
 
 tasks.register<Exec>("githubMergeAll") {
     group = "github"
-    description = "Attempts to update and merge ALL open Pull Requests automatically."
+    description = "Updates and enables auto-merge for all OPEN Pull Requests."
     val script = """
-        gh pr list --json number -q '.[].number' | while read -r pr; do
-          echo "Processing PR #${'$'}pr..."
-          # 1. Update branch from main (resolves out-of-date/stale failures)
-          gh pr update-branch "${'$'}pr" || echo "Note: Branch update skipped or failed for #${'$'}pr"
-          
-          # 2. Enable auto-merge
-          gh pr merge "${'$'}pr" --auto --squash --delete-branch
-        done
+        echo "Fetching open pull requests..."
+        gh pr list --state open --json number,title,mergeable,mergeStateStatus --template \
+          '{{range .}}{{.number}}{{"\t"}}{{.mergeable}}{{"\t"}}{{.mergeStateStatus}}{{"\t"}}{{.title}}{{"\n"}}{{end}}' | \
+          while IFS=${'$'}'\t' read -r pr mergeable status title; do
+            echo "------------------------------------------------------------"
+            echo "PR #${'$'}pr: ${'$'}title"
+            echo "Status: ${'$'}status, Mergeable: ${'$'}mergeable"
+
+            if [ "${'$'}mergeable" = "CONFLICTING" ]; then
+              echo "⚠️  Skipping: PR has conflicts that must be resolved manually."
+              continue
+            fi
+
+            if [ "${'$'}status" = "BEHIND" ]; then
+              echo "🔄 Updating branch from main..."
+              gh pr update-branch "${'$'}pr" || echo "❌ Branch update failed for #${'$'}pr"
+            fi
+
+            echo "🚀 Enabling auto-merge..."
+            gh pr merge "${'$'}pr" --auto --squash --delete-branch || echo "❌ Could not enable auto-merge for #${'$'}pr"
+          done
     """.trimIndent()
     commandLine("bash", "-c", script)
 }
