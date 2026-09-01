@@ -132,13 +132,15 @@ check out our [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### 🛠️ Creator Workflow
 
-Creators (Maintainers) use automated tasks to manage the project:
+Creators use a "Smart Sync" engine to ensure zero conflicts and a clean linear history:
 
 1. **Run Locally**: `./gradlew :gateway:run`
-2. **Test Release**: `./gradlew releaseTest` (Increments version, tags, and creates a GitHub Pre-release).
-3. **Production Release**: `./gradlew releaseProduction` (Promotes to stable and creates a full GitHub Release).
+2. **Smart Sync**: `./gradlew githubSync` (Ensures local and remote are perfectly aligned).
+3. **Automated Merge**: `./gradlew githubMerge` (Syncs, PRs, and enables auto-merge).
+4. **Test Release**: `./gradlew releaseTest` (Increments version and triggers pre-release).
+5. **Production Release**: `./gradlew releaseProduction` (Promotes to stable release).
 
-For deep-dives into the architecture or release system, see [AGENTS.md](AGENTS.md).
+For deep-dives into the architecture or modular automation system, see [AGENTS.md](AGENTS.md).
 
 ## 🛡️ License
 
