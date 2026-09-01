@@ -90,8 +90,14 @@ fleet.conf.local
 private_fleet.conf
 config/private_fleet.conf
 
-# Docker
-.docker/
+# Sandbox Data
+/data/
+/logs/
+/registry/
+/.cache/
+/.venv/
+/gateway/build/
+/frontend/*/build/
 
 # Test environments
 /test_acc_environment/

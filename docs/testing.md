@@ -11,23 +11,23 @@ To run:
 ./gradlew :common:jvmTest
 ```
 
-## 🐳 Container & Deployment Verification
-With the pivot to a container-first architecture, ensure the production image builds correctly:
+## 📦 Sandbox & Deployment Verification
+With the pivot to a folder-sandbox architecture, ensure the Gateway JAR builds correctly:
 
 ```bash
-docker compose build acc-gateway
+./gradlew :gateway:assemble
 ```
 
 Verify the bridge's platform-aware logic:
 ```bash
-# Within the container
 python3 brain/system_bridge.py
 ```
 
 ## 🏗️ Hardware Audit
 The `python3 acc.py setup` command performs a universal audit on the host:
-- **Docker/Podman** availability.
-- **GPU Passthrough** capability (NVIDIA Container Toolkit or macOS virtualization).
+- **Java (JDK 21+)** availability.
+- **Python (3.10+)** and virtual environment integrity.
+- **Ollama** availability for local model execution.
 - **Network Routing** between the Gateway and AI engines.
 *Note: Setup and hardware optimization are host-level tasks and cannot be triggered from the UI for security reasons.*
 

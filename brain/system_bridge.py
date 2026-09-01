@@ -41,11 +41,12 @@ def get_fleet_disk_usage():
         if sys.platform == "darwin":
             ollama_dir = os.path.expanduser("~/Library/Application Support/Ollama/models")
         else:
-            ollama_dir = os.path.expanduser("~/.ollama/models")
-            
-        # Overwrite if in Docker
-        if os.path.exists("/root/.ollama/models"):
-            ollama_dir = "/root/.ollama/models"
+            # Sandbox mode: check local data folder first, fallback to user home
+            sandbox_dir = os.path.join(PROJECT_ROOT, "data/ollama/models")
+            if os.path.exists(sandbox_dir):
+                ollama_dir = sandbox_dir
+            else:
+                ollama_dir = os.path.expanduser("~/.ollama/models")
 
         if not os.path.exists(ollama_dir): return "0B"
         process = subprocess.Popen(["du", "-sh", ollama_dir], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -55,7 +56,7 @@ def get_fleet_disk_usage():
 
 def get_ollama_status():
     try:
-        # Check OLLAMA_HOST from env (Docker context) or default
+        # Check OLLAMA_HOST from env or default
         base_url = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
         resp = requests.get(f"{base_url}/api/tags", timeout=1)
         if resp.status_code == 200:

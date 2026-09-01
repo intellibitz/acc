@@ -38,31 +38,12 @@ def run_shell(cmd, cwd=PROJECT_ROOT, check=True, capture=False, sudo=False):
 def ensure_system_deps():
     log("Auditing system dependencies...")
     missing = []
-    for cmd in ["docker", "jq", "curl"]:
+    for cmd in ["java", "python3", "jq", "curl"]:
         if not shutil.which(cmd): missing.append(cmd)
     
     if missing:
-        log(f"Missing tools: {missing}. Attempting auto-install...")
-        os_type = platform.system()
-        if os_type == "Linux":
-            if shutil.which("apt-get"):
-                run_shell(f"apt-get update -qq && apt-get install -y {' '.join(['docker.io' if m=='docker' else m for m in missing])}", sudo=True)
-            elif shutil.which("dnf"):
-                run_shell(f"dnf install -y {' '.join(['docker' if m=='docker' else m for m in missing])}", sudo=True)
-            elif shutil.which("pacman"):
-                run_shell(f"pacman -S --noconfirm {' '.join(['docker' if m=='docker' else m for m in missing])}", sudo=True)
-        elif os_type == "Darwin":
-            if shutil.which("brew"):
-                run_shell(f"brew install {' '.join([m for m in missing if m != 'docker'])}")
-                if "docker" in missing: log("Please install Docker Desktop for Mac.")
-        elif os_type == "Windows":
-            if shutil.which("winget"):
-                for m in missing:
-                    if m == "docker": log("Please install Docker Desktop for Windows.")
-                    else: run_shell(f"winget install {m}")
-        else:
-            error(f"Auto-install not supported on {os_type}. Please install manually: {missing}")
-            sys.exit(1)
+        log(f"Missing tools: {missing}. Please install them manually.")
+        sys.exit(1)
 
 def tune_hardware():
     if platform.system() != "Linux":
@@ -92,6 +73,13 @@ def setup_env():
     for d in [LOGS_DIR, CACHE_DIR, REGISTRY_DIR, DATA_DIR / "backups", CONFIG_DIR]:
         d.mkdir(parents=True, exist_ok=True)
 
+    # Ensure python dependencies
+    if not (PROJECT_ROOT / ".venv").exists():
+        log("Creating virtual environment...")
+        run_shell("python3 -m venv .venv")
+        log("Installing Python dependencies...")
+        run_shell("./.venv/bin/pip install -r requirements.txt huggingface-hub")
+
     keystore = CONFIG_DIR / "keystore.p12"
     if not keystore.exists():
         log("Generating secure local identity...")
@@ -111,19 +99,31 @@ def setup_env():
     log("[SUCCESS] Environment ready. Run 'acc.py optimize' if you want to tune hardware.")
 
 def smart_start():
-    # If already in Docker, we shouldn't be calling smart_start for infrastructure
-    if os.environ.get("IN_DOCKER") == "true":
-        log("Acc Services are active.")
-        return
+    log("Launching Acc Cockpit in Folder Sandbox Mode...")
+    
+    # Build if needed
+    jar_path = PROJECT_ROOT / "gateway/build/libs/gateway-1.0.0.jar"
+    if not jar_path.exists():
+        log("Gateway JAR not found. Building...")
+        run_shell("./gradlew :gateway:assemble")
 
-    # In Creator/Source mode, we use Docker Compose from the root
-    if (PROJECT_ROOT / ".git").exists():
-        log("Launching Acc Cockpit in Creator Mode...")
-        run_shell("docker compose up -d")
-        open_dashboard()
-    else:
-        error("Standalone mode is now managed via 'docker run'. Please see README.md")
-        sys.exit(1)
+    # Start Gateway in background
+    log("Starting Gateway...")
+    cmd = f"java -jar {jar_path}"
+    env = os.environ.copy()
+    env["ACC_ROOT"] = str(PROJECT_ROOT)
+    
+    # We'll use a simple pid file for tracking
+    pid_file = PROJECT_ROOT / ".gateway.pid"
+    with open(LOGS_DIR / "gateway.log", "w") as log_file:
+        proc = subprocess.Popen(cmd.split(), cwd=str(PROJECT_ROOT), env=env, 
+                               stdout=log_file, stderr=subprocess.STDOUT)
+        with open(pid_file, "w") as f:
+            f.write(str(proc.pid))
+    
+    log(f"Gateway started (PID: {proc.pid}). Logs: {LOGS_DIR / 'gateway.log'}")
+    time.sleep(2) # Wait for startup
+    open_dashboard()
 
 def open_dashboard():
     import webbrowser
@@ -204,8 +204,23 @@ def main():
             run_shell(f'curl -skX POST "{url}"')
         except: error("Gateway not responding. Is Acc running?")
     elif args.command == "stop":
-        log("Stopping infrastructure...")
-        if shutil.which("docker"): run_shell("docker compose down -v")
+        log("Stopping Acc processes...")
+        pid_file = PROJECT_ROOT / ".gateway.pid"
+        if pid_file.exists():
+            with open(pid_file, "r") as f:
+                pid = int(f.read())
+            try:
+                os.kill(pid, 15)
+                log(f"Stopped Gateway (PID: {pid})")
+            except:
+                pass
+            pid_file.unlink()
+        
+        # Kill any remaining agents/bridges
+        if platform.system() != "Windows":
+            run_shell("pkill -f 'brain/system_bridge.py' || true")
+            run_shell("pkill -f 'brain/agent_bridge.py' || true")
+        log("[SUCCESS] Processes stopped.")
     elif args.command == "uninstall":
         if (PROJECT_ROOT / ".git").exists():
             error("Uninstall blocked: Creator directory detected.")
@@ -214,7 +229,8 @@ def main():
             confirm = input("[PROMPT] This will delete all Acc data (models, configs). Are you sure? (y/N): ")
             if confirm.lower() != 'y': sys.exit(0)
         
-        if shutil.which("docker"): run_shell("docker compose down -v")
+        log("Stopping Acc processes...")
+        # (Implicitly calls stop logic or just kills everything)
         
         log("Reclaiming disk space...")
         # SAFE DELETE: Only delete known subdirectories

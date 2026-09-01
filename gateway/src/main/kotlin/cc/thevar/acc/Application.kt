@@ -22,14 +22,14 @@ import kotlin.time.Duration.Companion.seconds
 
 private fun findProjectRoot(): File {
     val envRoot = System.getenv("ACC_ROOT")?.let { File(it) }
-    if (envRoot != null && envRoot.exists()) return envRoot
+    if (envRoot != null && envRoot.exists()) return envRoot.absoluteFile
 
     val userDir = System.getProperty("user.dir")?.let { File(it) } ?: File(".")
     var current: File? = userDir.absoluteFile
 
     while (current != null) {
-        if (File(current, "acc").exists() && File(current, "settings.gradle.kts").exists()) return current
-        if (File(current, "acc").exists() && File(current, "config").exists() && File(current, "data").exists()) return current
+        if (File(current, "acc.py").exists() && File(current, "settings.gradle.kts").exists()) return current
+        if (File(current, "config").exists() && File(current, "data").exists()) return current
         current = current.parentFile
     }
     return userDir.absoluteFile

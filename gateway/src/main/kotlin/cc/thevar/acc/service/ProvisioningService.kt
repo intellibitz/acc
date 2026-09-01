@@ -87,10 +87,9 @@ class ProvisioningService(
                     val dlDir = File(projectRoot, ".cache/${model.name}").apply { mkdirs() }
                     
                     val process = ProcessBuilder(
-                        "huggingface-cli", "download", model.repo, 
+                        "hf", "download", model.repo, 
                         "--include", model.filePattern,
-                        "--local-dir", dlDir.absolutePath,
-                        "--max-workers", "8"
+                        "--local-dir", dlDir.absolutePath
                     ).directory(projectRoot)
                     .redirectErrorStream(true)
                     .start()
@@ -146,8 +145,8 @@ class ProvisioningService(
     private suspend fun registerInOllama(model: ModelManifest, optDir: File, dlDir: File) {
         val ggufFile = dlDir.walkTopDown().find { it.extension == "gguf" } ?: throw Exception("GGUF not found")
         
-        // Map path for the Ollama container (using the shared volume path)
-        val ollamaGgufPath = "/app/.cache/${model.name}/${ggufFile.name}"
+        // Use absolute host path
+        val ollamaGgufPath = ggufFile.absolutePath
         
         val threads = Runtime.getRuntime().availableProcessors().let { if (it > 4) it - 4 else it }
         val gpuLayers = calculateGpuLayers(model.name)

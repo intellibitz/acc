@@ -1,7 +1,7 @@
 # 🚀 AI Command Center (acc)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Platform: Universal](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-blue.svg)](https://docker.com/)
+[![Platform: Universal](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-blue.svg)](https://github.com/intellibitz/acc)
 [![Engine: Backend-Agnostic](https://img.shields.io/badge/Engine-Ollama%20%7C%20LocalAI%20%7C%20vLLM-blueviolet.svg)](https://litellm.ai/)
 [![Frontend: Kotlin Multiplatform](https://img.shields.io/badge/Frontend-Compose%20Wasm%20%7C%20Android%20%7C%20Desktop-green.svg)](https://kotlinlang.org/docs/multiplatform.html)
 
@@ -60,30 +60,30 @@ acc is organized into a clean, professional architecture:
 
 ---
 
-## 🚀 Quick Start (True Zero Effort)
+## 🚀 Quick Start (Folder Sandbox Mode)
 
-Acc is **Unified & Universal**. Run the installer for your OS to launch your cockpit instantly:
-
-### 🐧 Linux, 🍎 macOS & 🪟 Windows
+`acc` runs as a folder-based sandbox. No Docker required.
 
 ```bash
-docker run -p 8333:8333 -v /var/run/docker.sock:/var/run/docker.sock intellibitz/acc-gateway
+# 1. Setup environment (creates .venv, downloads deps)
+python3 acc.py setup
+
+# 2. Launch the Cockpit
+python3 acc.py
 ```
 
-Once the cockpit is up, open **`http://localhost:8333`** to manage your fleet, engines, and agents
-with total zero-effort.
+Once the cockpit is up, open **`http://localhost:8333`** to manage your fleet, engines, and agents.
 
 ---
 
-## 🏗️ The "Zero-Footprint" Architecture
+## 🏗️ The Folder Sandbox Architecture
 
-Acc is designed to leave **no traces** on your system:
+`acc` is designed to be self-contained within its project directory:
 
-1. **Pure Docker**: The entire cockpit runs in a single container.
-2. **No Host Dependencies**: You don't need Python, Java, or Node installed on your workstation.
-3. **Engine Management**: The cockpit manages its own AI engines (Ollama, vLLM) via the Docker
-   socket.
-4. **Ephemeral Registry**: Local model manifests and parameters are stored in Docker volumes.
+1. **Host Native**: Runs directly on your host using Java and Python.
+2. **Local Engines**: Manages AI engines (like Ollama) as local background processes.
+3. **Isolated Data**: All models, configs, and logs are stored in `data/`, `registry/`, and `logs/` folders.
+4. **Zero Footprint**: Deleting the `acc` folder removes all traces from your system.
 
 ## 🛠️ Orchestrator Commands
 
@@ -147,8 +147,9 @@ acc maintains high stability through a multi-layered testing strategy:
 ## 🛠️ Prerequisites
 
 - **OS**: Linux (Ubuntu/Debian), macOS (Apple Silicon/Intel), or Windows 10/11.
-- **Engine**: **Docker Desktop** (Required for "Zero-Footprint" mode).
-- **Hardware**: NVIDIA GPU, Apple Silicon, or generic CPU.
+- **JDK 21+**: Required to run the Gateway.
+- **Python 3.10+**: Required for agents and bridges.
+- **Ollama**: (Optional) For local model execution.
 
 ---
 
@@ -159,9 +160,8 @@ check out our [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### 🛠️ Creator Workflow
 
-1. Verify changes: `docker compose build acc-gateway`
-2. Tag release: `git tag vX.Y.Z && git push --tags`
-3. Automation handles the rest!
+1. Verify changes: `./gradlew :gateway:assemble`
+2. Launch: `python3 acc.py`
 
 ## 🛡️ License
 

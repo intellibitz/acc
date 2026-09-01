@@ -69,32 +69,45 @@ class SupervisorService(private val projectRoot: File) : AutoCloseable {
     }
 
     fun startEngine(provider: String) {
-        val useLocal = System.getenv("ACC_USE_LOCAL_ENGINE") == "true"
-        if (useLocal && provider == "ollama") {
-            logger.info("Using local Ollama engine as requested (ACC_USE_LOCAL_ENGINE=true)")
+        if (provider != "ollama") {
+            logger.warn("Only 'ollama' engine provider is supported in sandbox mode for now.")
             return
         }
 
         scope.launch {
             try {
                 logger.info("Starting engine provider: {}", provider)
-                val process = ProcessBuilder("docker", "compose", "up", "-d", provider)
+                // Check if already running
+                if (isOllamaRunning()) {
+                    logger.info("Ollama is already running.")
+                    return@launch
+                }
+
+                val pb = ProcessBuilder("ollama", "serve")
                     .directory(projectRoot)
                     .redirectErrorStream(true)
-                    .start()
                 
-                process.inputStream.bufferedReader().useLines { lines ->
-                    lines.forEach { logger.info("[Docker] {}", it) }
-                }
-                val exitCode = process.waitFor()
-                if (exitCode == 0) {
-                    logger.info("Engine provider {} started.", provider)
-                } else {
-                    logger.warn("Engine provider {} failed with exit code {}", provider, exitCode)
-                }
+                pb.environment().put("OLLAMA_MODELS", File(projectRoot, "data/ollama").absolutePath)
+                File(projectRoot, "data/ollama").mkdirs()
+
+                val process = pb.start()
+                registerWorker("ENGINE_OLLAMA", listOf("ollama", "serve"), restartPolicy = true)
+                // In this local mode, we'll wrap it in a ManagedWorker if we want status tracking
+                // For now, let's just start it and let ManagedWorker handle it if registered
+                
+                logger.info("Engine provider {} started.", provider)
             } catch (e: Exception) {
                 logger.error("Failed to start engine {}: {}", provider, e.message, e)
             }
+        }
+    }
+
+    private fun isOllamaRunning(): Boolean {
+        return try {
+            val process = ProcessBuilder("pgrep", "-f", "ollama serve").start()
+            process.waitFor() == 0
+        } catch (e: Exception) {
+            false
         }
     }
 
