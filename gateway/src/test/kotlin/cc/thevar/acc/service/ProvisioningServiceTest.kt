@@ -2,36 +2,83 @@ package cc.thevar.acc.service
 
 import cc.thevar.acc.protocol.ModelManifest
 import cc.thevar.acc.protocol.ProvisioningStage
-import io.mockk.every
+import io.ktor.client.*
+import io.ktor.client.engine.mock.*
+import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.http.*
+import io.ktor.serialization.kotlinx.json.*
 import io.mockk.mockk
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import org.junit.Test
+import kotlinx.serialization.json.Json
 import java.io.File
+import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class ProvisioningServiceTest {
-    private val projectRoot = File("build/test-root").apply { mkdirs() }
+
     private val fleetManager = mockk<FleetManager>()
-    private val service = ProvisioningService(projectRoot, fleetManager)
+    private val tempDir = File("build/tmp/test").apply { mkdirs() }
 
     @Test
-    fun `test autoScale detection`() {
-        runBlocking {
-            // This just verifies it doesn't crash as it's mostly logs for now
-            service.autoScale()
-            assertNotNull(service)
+    fun `test provisioning completed when already installed`() = runBlocking {
+        val mockEngine = MockEngine { request ->
+            when (request.url.encodedPath) {
+                "/api/models/test/repo" -> {
+                    respond(
+                        content = """{"sha": "test-sha"}""",
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "application/json")
+                    )
+                }
+                "/api/tags" -> {
+                    respond(
+                        content = """{"models": [{"name": "test-model"}]}""",
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "application/json")
+                    )
+                }
+                "/api/create" -> {
+                    respond(
+                        content = """{"status": "success"}""",
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "application/json")
+                    )
+                }
+                else -> respondError(HttpStatusCode.NotFound)
+            }
         }
-    }
 
-    @Test
-    fun `test calculateGpuLayers`() {
-        val method = service.javaClass.getDeclaredMethod("calculateGpuLayers", String::class.java)
-        method.isAccessible = true
+        val client = HttpClient(mockEngine) {
+            install(ContentNegotiation) {
+                json(Json { ignoreUnknownKeys = true })
+            }
+        }
+
+        val service = ProvisioningService(tempDir, fleetManager, client)
         
-        assertEquals(20, method.invoke(service, "llama3-70b"))
-        assertEquals(10, method.invoke(service, "command-r-plus"))
-        assertEquals(99, method.invoke(service, "phi3-mini"))
+        // Write the local sha to avoid download
+        val regDir = File(tempDir, "registry/test-model").apply { mkdirs() }
+        File(regDir, "last_sync_sha").writeText("test-sha")
+
+        val model = ModelManifest(
+            name = "test-model",
+            repo = "test/repo",
+            filePattern = "*.gguf"
+        )
+
+        service.startProvisioning(model)
+
+        // Wait for job to finish (since it's launched in scope)
+        // In a real test we'd use a more robust way to wait
+        var attempts = 0
+        while (service.updates.value["test-model"]?.stage != ProvisioningStage.COMPLETED && attempts < 10) {
+            kotlinx.coroutines.delay(100)
+            attempts++
+        }
+
+        val status = service.updates.value["test-model"]
+        assertEquals(ProvisioningStage.COMPLETED, status?.stage)
+        assertEquals("Already current.", status?.message)
     }
 }

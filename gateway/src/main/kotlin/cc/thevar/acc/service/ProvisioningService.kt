@@ -20,6 +20,11 @@ import java.time.format.DateTimeFormatter
 class ProvisioningService(
     private val projectRoot: File,
     private val fleetManager: FleetManager,
+    private val client: HttpClient = HttpClient(CIO) {
+        install(ContentNegotiation) {
+            json(Json { ignoreUnknownKeys = true })
+        }
+    },
     private val ollamaHost: String = System.getenv("OLLAMA_HOST") ?: "http://localhost:11434"
 ) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -28,12 +33,6 @@ class ProvisioningService(
 
     private val activeJobs = ConcurrentHashMap<String, Job>()
     
-    private val client = HttpClient(CIO) {
-        install(ContentNegotiation) {
-            json(Json { ignoreUnknownKeys = true })
-        }
-    }
-
     private val json = Json { ignoreUnknownKeys = true }
 
     fun provisionAll() {

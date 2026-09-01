@@ -8,15 +8,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import cc.thevar.acc.ui.*
+import org.koin.compose.viewmodel.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun App() {
-    val agentVm: AgentViewModel = viewModel { AgentViewModel() }
-    val systemVm: SystemViewModel = viewModel { SystemViewModel() }
-    val consoleVm: ConsoleViewModel = viewModel { ConsoleViewModel() }
+    val agentVm: AgentViewModel = koinViewModel()
+    val systemVm: SystemViewModel = koinViewModel()
+    val consoleVm: ConsoleViewModel = koinViewModel()
     
     val messages by agentVm.messages.collectAsState()
     val systemState by systemVm.state.collectAsState()
@@ -45,36 +45,48 @@ fun App() {
             },
             contentWindowInsets = WindowInsets.safeDrawing // Proper Edge-to-Edge support
         ) { padding ->
-            Row(modifier = Modifier.padding(padding).fillMaxSize()) {
-                // Sidebar: Controls
-                Sidebar(
-                    systemState = systemState,
-                    onCommand = { consoleVm.runCommand(it) },
-                    onUpdate = { systemVm.updateSystem() }
-                )
+            BoxWithConstraints(modifier = Modifier.padding(padding).fillMaxSize()) {
+                val isCompact = maxWidth < 800.dp
                 
-                // Main Content
-                Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                    Row(modifier = Modifier.weight(0.7f).fillMaxWidth()) {
-                        // Middle: Thought Stream
-                        Box(modifier = Modifier.weight(1f).fillMaxHeight().padding(8.dp)) {
+                if (isCompact) {
+                    // Mobile Layout: Sidebar hidden, maybe accessible via Drawer or Bottom Sheet
+                    // For now, let's just show a condensed view
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(8.dp)) {
                             ThoughtStream(messages)
                         }
-                        
-                        // Right: System Stats & Fleet
-                        Box(modifier = Modifier.width(300.dp).fillMaxHeight().padding(8.dp)) {
-                            SystemPanel(
-                                systemState, 
-                                onCommand = { consoleVm.runCommand(it) }, 
-                                onSpawn = { name, model -> systemVm.spawnAgent(name, model) },
-                                onStartEngine = { provider -> systemVm.startEngine(provider) }
-                            )
+                        Box(modifier = Modifier.height(200.dp).fillMaxWidth().padding(8.dp)) {
+                            ConsoleView(consoleLines)
                         }
                     }
-                    
-                    // Bottom: Console
-                    Box(modifier = Modifier.weight(0.3f).fillMaxWidth().padding(8.dp)) {
-                        ConsoleView(consoleLines)
+                } else {
+                    // Desktop Layout: Sidebar + Main + System Panel
+                    Row(modifier = Modifier.fillMaxSize()) {
+                        Sidebar(
+                            systemState = systemState,
+                            onCommand = { consoleVm.runCommand(it) },
+                            onUpdate = { systemVm.updateSystem() }
+                        )
+                        
+                        Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                            Row(modifier = Modifier.weight(0.7f).fillMaxWidth()) {
+                                Box(modifier = Modifier.weight(1f).fillMaxHeight().padding(8.dp)) {
+                                    ThoughtStream(messages)
+                                }
+                                Box(modifier = Modifier.width(300.dp).fillMaxHeight().padding(8.dp)) {
+                                    SystemPanel(
+                                        systemState, 
+                                        onCommand = { consoleVm.runCommand(it) }, 
+                                        onSpawn = { name, model -> systemVm.spawnAgent(name, model) },
+                                        onStartEngine = { provider -> systemVm.startEngine(provider) }
+                                    )
+                                }
+                            }
+                            
+                            Box(modifier = Modifier.weight(0.3f).fillMaxWidth().padding(8.dp)) {
+                                ConsoleView(consoleLines)
+                            }
+                        }
                     }
                 }
             }

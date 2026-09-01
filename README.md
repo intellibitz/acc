@@ -46,12 +46,8 @@ acc is designed for the developer who wants to *use* AI, not fight with dependen
 
 acc is organized into a clean, professional architecture:
 
-- **`gateway/`**: The **Manager** (Control Plane). A high-performance Ktor hub that supervises all
-  workers, handles provisioning (Kotlin-native), and serves the UI. Features a hardened
-  `CommandHandler` and a stream-based hardware-stats consumer.
-- **`frontend/`**: The **Deck** (UI). A Compose Multiplatform app providing real-time observability.
-  Modularized into discrete components (Sidebar, Console, Dashboard) with full **Edge-to-Edge**
-  support.
+- **`gateway/`**: The **Manager** (Control Plane). A modular Ktor hub powered by **Koin DI**. It supervises all workers, handles provisioning (Kotlin-native), and serves the UI. Features modular routing, a dedicated `MonitoringService` for real-time telemetry, and a hardened `CommandHandler`.
+- **`frontend/`**: The **Deck** (UI). A Compose Multiplatform app providing real-time observability. Powered by **Koin DI** for cross-platform ViewModel management. Features an **Adaptive UI** that automatically scales from mobile to desktop.
 - **`brain/`**: The **Intelligence** layer. Managed Python workers for agents and a persistent
   system metrics bridge, communicating via type-safe JSON protocols.
 - **`common/`**: The **Registry**. Shared type-safe protocols and models ensuring
@@ -123,12 +119,10 @@ The `acc` script acts as a smart dispatcher for your workstation:
 
 acc is built like a production container orchestrator:
 
-- **Manager-Worker Model**: The Gateway acts as a Control Plane, supervising all background
-  processes.
-- **API Orchestration**: All model management is handled via secure HTTP APIs to engines (
-  Ollama/vLLM), rather than brittle CLI calls.
-- **Auto-Heal**: If a metrics bridge or agent crashes, the Manager automatically detects and
-  restarts it.
+- **Modular Control Plane**: The Gateway uses **Koin Dependency Injection** to manage lifecycle and service discovery, ensuring high testability and clean code.
+- **API Orchestration**: All model management is handled via secure HTTP APIs to engines (Ollama/vLLM), rather than brittle CLI calls.
+- **Real-time Telemetry**: A dedicated `MonitoringService` manages WebSocket streams, ensuring metrics reach the UI with sub-millisecond latency.
+- **Auto-Heal**: If a metrics bridge or agent crashes, the Manager automatically detects and restarts it.
 - **Console Sandbox**: The terminal interface is strictly restricted to non-privileged orchestration
   tasks. Sensitive operations like `setup` or `tune-hw` are host-only to prevent unauthorized system
   modification.

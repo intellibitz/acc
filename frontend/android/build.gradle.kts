@@ -12,7 +12,7 @@ kotlin {
 }
 dependencies {
     implementation(project(":frontend:composeApp"))
-
+    implementation(libs.koin.android)
     implementation(libs.androidx.activity.compose)
 
     implementation(libs.compose.uiToolingPreview)

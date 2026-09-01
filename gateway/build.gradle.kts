@@ -23,6 +23,8 @@ tasks.processResources {
 dependencies {
     api(project(":common"))
     implementation(libs.logback)
+    implementation(libs.koin.ktor)
+    implementation(libs.koin.logger.slf4j)
     implementation(libs.ktor.serverCore)
     implementation(libs.ktor.serverNetty)
     implementation(libs.ktor.serverWebsockets)
@@ -33,6 +35,7 @@ dependencies {
     implementation(libs.ktor.clientContentNegotiation)
     implementation(libs.kotlinx.serialization.json)
     testImplementation(libs.ktor.serverTestHost)
+    testImplementation(libs.ktor.client.mock)
     testImplementation(libs.kotlin.testJunit)
     testImplementation(libs.mockk)
 }
