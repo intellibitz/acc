@@ -31,5 +31,5 @@ fun gatewayModule(projectRoot: File) = module {
     single { SupervisorService(get()) }
     single { AgentService(get()) }
     single { CommandHandler(get(), get()) }
-    single { MonitoringService(get(), get(), get(), get(), get(), get(), get()) }
+    single { MonitoringService(get(), get(), get(), get(), get()) }
 }

@@ -2,7 +2,6 @@ package cc.thevar.acc.service
 
 import cc.thevar.acc.protocol.*
 import io.ktor.client.*
-import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
@@ -21,11 +20,7 @@ import java.util.concurrent.ConcurrentHashMap
 class ProvisioningService(
     private val projectRoot: File,
     private val fleetManager: FleetManager,
-    private val client: HttpClient = HttpClient(CIO) {
-        install(ContentNegotiation) {
-            json(Json { ignoreUnknownKeys = true })
-        }
-    },
+    private val client: HttpClient,
     private val ollamaHost: String = System.getenv("OLLAMA_HOST") ?: "http://localhost:11434"
 ) : AutoCloseable {
     private val logger = LoggerFactory.getLogger(javaClass)

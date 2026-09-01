@@ -44,7 +44,13 @@ class SystemBootstrapper(private val projectRoot: File) {
             fleetJson.writeText(defaultFleet)
         }
 
-        // 4. System tuning (Linux only)
+        // 4. Create sentinel
+        val initSentinel = File(projectRoot, "data/.initialized")
+        if (!initSentinel.exists()) {
+            initSentinel.createNewFile()
+        }
+
+        // 5. System tuning (Linux only)
         if (System.getProperty("os.name").contains("Linux", ignoreCase = true)) {
             applyLinuxTuning()
         }
@@ -54,11 +60,12 @@ class SystemBootstrapper(private val projectRoot: File) {
 
     private fun generateKeystore(file: File) {
         logger.info("Generating secure local identity...")
+        val password = System.getenv("ACC_KEYSTORE_PASSWORD") ?: "password"
         try {
             val cmd = listOf(
                 "keytool", "-genkeypair", "-alias", "acc", "-keyalg", "RSA", "-keysize", "2048",
                 "-storetype", "PKCS12", "-keystore", file.absolutePath, "-validity", "365",
-                "-storepass", "password", "-keypass", "password",
+                "-storepass", password, "-keypass", password,
                 "-dname", "CN=localhost, OU=acc, O=intellibitz, L=Unknown, ST=Unknown, C=Unknown"
             )
             val process = ProcessBuilder(cmd).start()
