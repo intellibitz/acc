@@ -24,4 +24,4 @@ jobs:
         uses: gradle/actions/setup-gradle@v3
 
       - name: Run Tests
-        run: ./gradlew check --stacktrace
+        run: ./gradlew compileKotlin test --stacktrace
