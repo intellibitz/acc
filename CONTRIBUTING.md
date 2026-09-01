@@ -13,7 +13,15 @@ We love your input! We want to make acc the best zero-effort AI orchestration to
 - Open an issue with the tag `enhancement`.
 - Describe the feature and why it fits the "Zero Effort" vision.
 
-### Pull Requests
+### Pull Requests (The "Smart" Way)
+We recommend using the built-in Gradle automation for a frictionless experience:
+1. Fork the repo and clone it.
+2. Run `./gradlew githubFeature -Pname=MyFeature`.
+3. Do your work.
+4. Run `./gradlew githubMerge`.
+5. Sit back while CI passes and the repo auto-merges your contribution.
+
+### Pull Requests (The Manual Way)
 1. Fork the repo.
 2. Create a feature branch (`git checkout -b feature/Superpower`).
 3. Commit your changes (`git commit -m 'Add new model superpower'`).

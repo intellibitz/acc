@@ -37,14 +37,26 @@ We use a semi-automated release system triggered by Gradle and completed by GitH
   - Tags and pushes to GitHub.
   - Triggers a **Full Release** on GitHub.
 
-### GitHub Creator Tasks:
-Maintainers can use these specialized tasks to interact with the repository:
-- **Open Repo**: `./gradlew githubOpen` (Opens browser)
-- **Create PR**: `./gradlew githubPR` (Automates `--fill` PR creation)
-- **Check Status**: `./gradlew githubChecks` (Watches CI check progress)
-- **Manage Issues**: `./gradlew githubIssues` (Lists current issues)
-- **View Actions**: `./gradlew githubActions` (Opens Actions tab)
-- **Wiki**: `./gradlew githubWiki` (Opens Wiki)
+### GitHub Creator Tasks (Modular Automation)
+We use a modular automation engine in [github-automation.gradle.kts](github-automation.gradle.kts) to manage the repository lifecycle. These tasks ensure a clean, linear history and "Zero Effort" maintenance.
+
+- **Smart Sync**: `./gradlew githubSync`
+  - Keeps your current branch updated with `remote` and `main`.
+  - Automatically captures local work and rebases on the latest `origin/main`.
+  - Handles accidental work on `main` by moving it to a `sync/` branch.
+- **Merge Current**: `./gradlew githubMerge`
+  - Syncs, updates from `main`, ensures a PR exists, and enables **Auto-merge**.
+- **Merge All**: `./gradlew githubMergeAll`
+  - The "Elite Maintenance" task. Bulk-syncs and enables auto-merge for all open PRs.
+- **Return to Main**: `./gradlew githubMain`
+  - Safely saves current work to GitHub and returns your local environment to a fresh, hard-reset `main` branch.
+- **New Feature**: `./gradlew githubFeature -Pname=my-feature`
+  - Creates a timestamped feature branch and opens a PR immediately.
+- **Repository Utilities**:
+  - `githubSetup`: Configures the repo for optimal workflow (auto-merge, branch deletion).
+  - `githubOpen`: Opens the repository in your browser.
+  - `githubChecks`: Watches CI progress for the current branch.
+  - `githubFixAll`: Attempts to fix failed PRs by updating branches and rerunning CI.
 
 ### Deployment for Pilots:
 Users can simply download the `acc-gateway-x.y.z.jar` from the GitHub Release and run:
