@@ -96,3 +96,27 @@ tasks.register<Exec>("pushToGitHub") {
     group = "publishing"
     commandLine("git", "push", "origin", "HEAD")
 }
+
+tasks.register("syncToGitHub") {
+    group = "publishing"
+    description = "Automatically adds, commits (generic message), and pushes all changes to GitHub."
+    doLast {
+        // 1. Add everything
+        git("add", ".")
+
+        // 2. Try to commit (ignore error if nothing to commit)
+        try {
+            git("commit", "-m", "chore: automated sync to GitHub")
+        } catch (e: Exception) {
+            if (e.message?.contains("nothing to commit") == true) {
+                println("Nothing to commit, proceeding to push.")
+            } else {
+                throw e
+            }
+        }
+
+        // 3. Push
+        git("push", "origin", "HEAD")
+        println("Successfully synced changes to GitHub.")
+    }
+}
