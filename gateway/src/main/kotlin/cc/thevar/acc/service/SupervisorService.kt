@@ -21,16 +21,9 @@ class SupervisorService(private val projectRoot: File) : AutoCloseable {
     val workerStates = _workerStates.asStateFlow()
 
     init {
-        val venvPython = File(projectRoot, ".venv/bin/python3").absolutePath
-        val pythonCmd = if (File(venvPython).exists()) venvPython else "python3"
-
-        // Register core workers
-        registerWorker("SYSTEM_BRIDGE", listOf(pythonCmd, "brain/system_bridge.py"), restartPolicy = true)
+        // No more Python bridges
         registerWorker("FRONTEND_BUILDER", listOf("./gradlew", ":frontend:web:wasmJsBrowserDistribution", "--quiet"), restartPolicy = false)
         
-        // Start core workers automatically
-        startWorker("SYSTEM_BRIDGE")
-
         // Start monitoring loop
         scope.launch {
             while (isActive) {
@@ -58,14 +51,9 @@ class SupervisorService(private val projectRoot: File) : AutoCloseable {
     }
 
     fun spawnAgent(agentName: String, model: String, apiBase: String? = null) {
-        val venvPython = File(projectRoot, ".venv/bin/python3").absolutePath
-        val pythonCmd = if (File(venvPython).exists()) venvPython else "python3"
-        
-        val env = mutableMapOf("ACC_MODEL" to model)
-        if (apiBase != null) env["ACC_API_BASE"] = apiBase
-        
-        registerWorker("AGENT_$agentName", listOf(pythonCmd, "brain/agent_bridge.py"), restartPolicy = true, env = env)
-        startWorker("AGENT_$agentName")
+        logger.info("Spawning Kotlin-native agent: {} for model: {}", agentName, model)
+        // In this new architecture, agents are services, not separate processes.
+        // We can track them here if needed, or just let the AgentService handle requests.
     }
 
     fun startEngine(provider: String) {

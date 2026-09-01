@@ -3,6 +3,7 @@ package cc.thevar.acc
 import cc.thevar.acc.di.gatewayModule
 import cc.thevar.acc.routing.configureRouting
 import cc.thevar.acc.service.MonitoringService
+import cc.thevar.acc.service.SystemBootstrapper
 import io.ktor.serialization.kotlinx.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
@@ -28,7 +29,7 @@ private fun findProjectRoot(): File {
     var current: File? = userDir.absoluteFile
 
     while (current != null) {
-        if (File(current, "acc.py").exists() && File(current, "settings.gradle.kts").exists()) return current
+        if (File(current, "settings.gradle.kts").exists() && File(current, "gradlew").exists()) return current
         if (File(current, "config").exists() && File(current, "data").exists()) return current
         current = current.parentFile
     }
@@ -74,6 +75,9 @@ fun main() {
 }
 
 fun Application.module() {
+    val bootstrapper by inject<SystemBootstrapper>()
+    bootstrapper.bootstrap()
+
     install(Koin) {
         slf4jLogger()
         modules(gatewayModule(projectRoot))

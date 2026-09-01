@@ -1,6 +1,9 @@
 package cc.thevar.acc.service
 
 import cc.thevar.acc.protocol.*
+import io.ktor.client.*
+import io.ktor.client.request.*
+import io.ktor.client.statement.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.*
@@ -8,15 +11,21 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
 import org.slf4j.LoggerFactory
 import java.io.File
+import kotlin.time.Duration.Companion.seconds
 
 class MonitoringService(
     private val projectRoot: File,
     private val supervisorService: SupervisorService,
     private val provisioningService: ProvisioningService,
-    private val sessionManager: SessionManager
+    private val fleetManager: FleetManager,
+    private val systemMetricsService: SystemMetricsService,
+    private val sessionManager: SessionManager,
+    private val client: HttpClient,
+    private val ollamaHost: String = System.getenv("OLLAMA_HOST") ?: "http://localhost:11434"
 ) : AutoCloseable {
     private val logger = LoggerFactory.getLogger(javaClass)
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val json = Json { ignoreUnknownKeys = true }
 
     fun start(applicationScope: CoroutineScope) {
         val initSentinel = File(projectRoot, "data/.initialized")
@@ -50,32 +59,55 @@ class MonitoringService(
 
         // Metrics streaming
         applicationScope.launch(Dispatchers.IO) {
-            supervisorService.getWorkerOutput("SYSTEM_BRIDGE").collect { output ->
+            while (isActive) {
                 try {
-                    if (output.startsWith("{") && output.endsWith("}")) {
-                        val bridgeData = Json.parseToJsonElement(output).jsonObject
+                    val stats = systemMetricsService.getSystemStats()
+                    
+                    val installedModels = try {
+                        val response = client.get("$ollamaHost/api/tags")
+                        if (response.status.value == 200) {
+                            val body = response.bodyAsText()
+                            json.parseToJsonElement(body).jsonObject["models"]?.jsonArray
+                                ?.map { it.jsonObject["name"]?.jsonPrimitive?.content?.split(":")?.first() ?: "" }
+                                ?.toSet() ?: emptySet()
+                        } else emptySet()
+                    } catch (e: Exception) { emptySet() }
 
-                        if (bridgeData.containsKey("error")) {
-                            sessionManager.systemStatusMsg = bridgeData["error"]?.jsonPrimitive?.content ?: "Bridge Error"
-                            return@collect
-                        }
+                    val runningModels = try {
+                        val response = client.get("$ollamaHost/api/ps")
+                        if (response.status.value == 200) {
+                            val body = response.bodyAsText()
+                            json.parseToJsonElement(body).jsonObject["models"]?.jsonArray
+                                ?.map { it.jsonObject["name"]?.jsonPrimitive?.content?.split(":")?.first() ?: "" }
+                                ?.toSet() ?: emptySet()
+                        } else emptySet()
+                    } catch (e: Exception) { emptySet() }
 
-                        val fullState = SystemState(
-                            stats = Json.decodeFromJsonElement<SystemStats>(bridgeData["stats"]!!),
-                            fleet = Json.decodeFromJsonElement<List<ModelStatus>>(bridgeData["fleet"]!!),
-                            partialDownloads = Json.decodeFromJsonElement<List<String>>(bridgeData["partialDownloads"]!!),
-                            proxyOnline = Json.decodeFromJsonElement<Boolean>(bridgeData["proxyOnline"]!!),
-                            engineOnline = bridgeData["engineOnline"]?.jsonPrimitive?.boolean ?: false,
-                            workers = supervisorService.workerStates.value,
-                            provisioning = provisioningService.updates.value.values.toList(),
-                            statusMsg = sessionManager.systemStatusMsg
+                    val fleet = fleetManager.getFleet().map { model ->
+                        ModelStatus(
+                            name = model.name,
+                            provider = model.provider,
+                            isInstalled = model.provider != "ollama" || installedModels.contains(model.name),
+                            isRunning = model.provider != "ollama" || runningModels.contains(model.name),
+                            type = if (model.isPrivate) "PRIV" else "COMM"
                         )
-
-                        broadcast(Frame.Text(Json.encodeToString(fullState)), sessionManager.systemSessions + sessionManager.uiSessions)
                     }
+
+                    val fullState = SystemState(
+                        stats = stats,
+                        fleet = fleet,
+                        workers = supervisorService.workerStates.value,
+                        provisioning = provisioningService.updates.value.values.toList(),
+                        proxyOnline = false,
+                        engineOnline = installedModels.isNotEmpty() || runningModels.isNotEmpty() || true,
+                        statusMsg = sessionManager.systemStatusMsg
+                    )
+
+                    broadcast(Frame.Text(Json.encodeToString(fullState)), sessionManager.systemSessions + sessionManager.uiSessions)
                 } catch (e: Exception) {
-                    logger.debug("Parsing error in metrics stream (possibly partial line): {}", e.message)
+                    logger.debug("Metrics stream error: {}", e.message)
                 }
+                delay(2.seconds)
             }
         }
 

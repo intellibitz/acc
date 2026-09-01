@@ -43,38 +43,9 @@ class CommandHandler(
                 emit(ConsoleLine("Fleet synchronization started.", "INFO"))
                 emit(ConsoleLine("Task Finished", "SUCCESS"))
             }
-            in allowedExternalCommands -> {
-                executeExternalCommand(baseCommand, args).collect { emit(it) }
-            }
             else -> {
-                emit(ConsoleLine("Error: Command '$baseCommand' is not allowed or unrecognized.", "ERROR"))
+                emit(ConsoleLine("Error: Command '$baseCommand' is not allowed or unrecognized. External commands are disabled in Kotlin-native mode.", "ERROR"))
             }
         }
     }.flowOn(Dispatchers.IO)
-
-    private fun executeExternalCommand(command: String, args: List<String>): Flow<ConsoleLine> = flow {
-        try {
-            val cmdList = mutableListOf("python3", "acc.py", command)
-            cmdList.addAll(args)
-            
-            val process = ProcessBuilder(cmdList)
-                .directory(projectRoot)
-                .redirectErrorStream(true)
-                .start()
-
-            process.inputStream.bufferedReader().useLines { lines ->
-                lines.forEach { line ->
-                    emit(ConsoleLine(line, "INFO"))
-                }
-            }
-            val exitCode = process.waitFor()
-            if (exitCode == 0) {
-                emit(ConsoleLine("Task Finished", "SUCCESS"))
-            } else {
-                emit(ConsoleLine("Command failed with exit code $exitCode", "ERROR"))
-            }
-        } catch (e: Exception) {
-            emit(ConsoleLine("Execution Error: ${e.message}", "ERROR"))
-        }
-    }
 }

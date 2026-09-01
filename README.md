@@ -20,14 +20,9 @@ acc is designed for the developer who wants to *use* AI, not fight with dependen
 
 - **Unified Visual Interface**: A high-performance Compose Multiplatform app (Wasm, Android,
   Desktop) for real-time agent observability.
-- **Thought Stream**: Visualize the agent's internal reasoning process (the "hidden thoughts") as
-  they happen.
-- **Tool Visualization**: Transparently monitor tool calls (shell commands, file edits) in a
-  terminal-style interface.
-- **Master Orchestrator**: A unified **Python-based** orchestrator (`acc.py`) for cross-platform
-  consistency. Just type `acc` to start.
-- **On-Demand Spawning**: Instantly spawn specialized agent bridges (NLE, Architect, Researcher) for
-  any model in your fleet.
+- **Thought Stream**: Visualize the agent's internal reasoning process (the "hidden thoughts") as they happen.
+- **Tool Visualization**: Transparently monitor tool calls (shell commands, file edits) in a terminal-style interface.
+- **On-Demand Spawning**: Instantly spawn specialized agent services for any model in your fleet.
 - **Visual Dashboard**: Real-time TUI tracking CPU, RAM, and hardware metrics (NVIDIA CUDA / Apple
   Silicon) via the **HWT** (Hardware Tuner).
 - **Backend Agnostic**: Native support for **Ollama**, **LocalAI**, and **vLLM**, plus integration
@@ -48,8 +43,7 @@ acc is organized into a clean, professional architecture:
 
 - **`gateway/`**: The **Manager** (Control Plane). A modular Ktor hub powered by **Koin DI**. It supervises all workers, handles provisioning (Kotlin-native), and serves the UI. Features modular routing, a dedicated `MonitoringService` for real-time telemetry, and a hardened `CommandHandler`.
 - **`frontend/`**: The **Deck** (UI). A Compose Multiplatform app providing real-time observability. Powered by **Koin DI** for cross-platform ViewModel management. Features an **Adaptive UI** that automatically scales from mobile to desktop.
-- **`brain/`**: The **Intelligence** layer. Managed Python workers for agents and a persistent
-  system metrics bridge, communicating via type-safe JSON protocols.
+- **`brain/`**: The **Intelligence** layer. Native Kotlin agent services for high-performance reasoning.
 - **`common/`**: The **Registry**. Shared type-safe protocols and models ensuring
   backend-to-frontend integrity, verified by automated JVM tests. Includes **HWT** and **Provisioner
   ** logic.
@@ -60,64 +54,44 @@ acc is organized into a clean, professional architecture:
 
 ---
 
-## 🚀 Quick Start (Folder Sandbox Mode)
+## 🚀 Quick Start (Zero-Effort Kotlin Sandbox)
 
-`acc` runs as a folder-based sandbox. No Docker required.
+`acc` is now a single, self-contained Kotlin application. No Python, no Docker.
 
 ```bash
-# 1. Setup environment (creates .venv, downloads deps)
-python3 acc.py setup
-
-# 2. Launch the Cockpit
-python3 acc.py
+# 1-Line Launch (Requires Java 21)
+java -jar acc.jar
 ```
 
-Once the cockpit is up, open **`http://localhost:8333`** to manage your fleet, engines, and agents.
+Once launched, open **`http://localhost:8333`** to access your elite AI Command Center.
+
+### Prerequisites
+- **JDK 21+**: The only requirement to run the cockpit.
+- **Ollama**: (Optional) For high-performance local LLM execution.
 
 ---
 
-## 🏗️ The Folder Sandbox Architecture
+## 🏗️ Pure Kotlin Architecture
 
-`acc` is designed to be self-contained within its project directory:
+`acc` has evolved into a unified, high-performance environment:
 
-1. **Host Native**: Runs directly on your host using Java and Python.
-2. **Local Engines**: Manages AI engines (like Ollama) as local background processes.
-3. **Isolated Data**: All models, configs, and logs are stored in `data/`, `registry/`, and `logs/` folders.
-4. **Zero Footprint**: Deleting the `acc` folder removes all traces from your system.
+1. **Manager (Gateway)**: A robust Ktor server that bootstraps the environment, manages system metrics (via OSHI), and serves the visual dashboard.
+2. **Deck (UI)**: A high-performance Compose Multiplatform interface compiled to WebAssembly (Wasm) for the browser.
+3. **Intelligence (Agent Service)**: Native Kotlin integration with local and cloud LLMs.
+4. **Zero Footprint**: Everything is contained within the `acc` directory. Deleting the folder removes everything.
 
 ## 🛠️ Orchestrator Commands
 
-The `acc` script acts as a smart dispatcher for your workstation:
+In Kotlin-native mode, all orchestration is handled via the **Visual Dashboard** or the **Built-in Console**.
 
 ### 🎮 User (The Pilot)
+Most operations like `sync`, `prune`, `backup`, and `auto-scale` are available directly in the Dashboard.
 
-| Command                        | Action                                                |
-|:-------------------------------|:------------------------------------------------------|
-| **`python3 acc.py`**           | Launch the Visual Dashboard and start infrastructure. |
-| **`python3 acc.py stop`**      | Gracefully shutdown all services and agents.          |
-| **`python3 acc.py uninstall`** | Completely remove Acc and reclaim all disk space.     |
-| **`python3 acc.py add`**       | Add a new model/provider to your fleet.               |
-| **`python3 acc.py optimize`**  | Tune host hardware for AI workloads (Linux only).     |
-
-### 🔧 Maintenance (The Mechanic)
-
-| Command                                | Action                                                 |
-|:---------------------------------------|:-------------------------------------------------------|
-| **`python3 acc.py stop`**              | Gracefully shutdown all services and agents.           |
-| **`python3 acc.py uninstall --force`** | Reclaim disk space by cleaning the fleet and registry. |
-
-### 📐 Developer (The Architect)
-
-| Command                            | Action                                                |
-|:-----------------------------------|:------------------------------------------------------|
-| **`python3 acc.py dev push`**      | Auto-stage and push project changes to GitHub.        |
-| **`python3 acc.py dev test`**      | Tag and trigger a Test/RC release workflow.           |
-| **`python3 acc.py dev release`**   | Branch, tag stable, and trigger the official release. |
-| **`python3 acc.py dev benchmark`** | Run the token-per-second (TPS) performance suite.     |
+---
 
 ## 🛡️ Self-Healing & Secure Architecture
 
-acc is built like a production container orchestrator:
+acc is built like a high-performance process orchestrator:
 
 - **Modular Control Plane**: The Gateway uses **Koin Dependency Injection** and **AutoCloseable** service lifecycles to ensure high testability, clean resource management, and zero "zombie" processes.
 - **API Orchestration**: All model management is handled via secure HTTP APIs to engines (Ollama/vLLM), rather than brittle CLI calls.
@@ -135,10 +109,8 @@ acc is built like a production container orchestrator:
 
 acc maintains high stability through a multi-layered testing strategy:
 
-- **Protocol Integrity**: Automated tests in `:common` verify that the JSON communication between
-  Python workers, the Kotlin Gateway, and the Compose UI never breaks.
-- **Environment Audit**: The `python3 acc.py setup` command performs a pre-flight health check of
-  your toolchain.
+- **Protocol Integrity**: Automated tests in `:common` verify that the JSON communication between the Kotlin Gateway and the Compose UI never breaks.
+- **Environment Audit**: The Manager performs a pre-flight health check of your toolchain on startup.
 - **Visual Parity**: UI components are developed with Material 3 tokens to ensure consistent
   rendering across Wasm, Android, and Desktop.
 
@@ -146,10 +118,9 @@ acc maintains high stability through a multi-layered testing strategy:
 
 ## 🛠️ Prerequisites
 
-- **OS**: Linux (Ubuntu/Debian), macOS (Apple Silicon/Intel), or Windows 10/11.
-- **JDK 21+**: Required to run the Gateway.
-- **Python 3.10+**: Required for agents and bridges.
-- **Ollama**: (Optional) For local model execution.
+- **OS**: Linux, macOS, or Windows.
+- **JDK 21+**: To run the universal JAR.
+- **Ollama**: For local model support.
 
 ---
 
@@ -160,8 +131,8 @@ check out our [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### 🛠️ Creator Workflow
 
-1. Verify changes: `./gradlew :gateway:assemble`
-2. Launch: `python3 acc.py`
+1. Build & Run: `./gradlew :gateway:run`
+2. Open Dashboard: `http://localhost:8333`
 
 ## 🛡️ License
 

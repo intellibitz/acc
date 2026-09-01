@@ -28,10 +28,6 @@ jobs:
         run: |
           mkdir -p dist/acc
           cp gateway/build/libs/gateway-1.0.0.jar dist/acc/app.jar
-          cp acc.py dist/acc/
-          cp requirements.txt dist/acc/
-          cp -r brain dist/acc/
-          cp -r config dist/acc/
           cp LICENSE dist/acc/
           cd dist && zip -r ../acc-sandbox-${{ github.ref_name }}.zip acc/
 
@@ -40,7 +36,6 @@ jobs:
         with:
           files: |
             acc-sandbox-${{ github.ref_name }}.zip
-            acc.py
             LICENSE
             RELEASE_NOTES.md
           generate_release_notes: true

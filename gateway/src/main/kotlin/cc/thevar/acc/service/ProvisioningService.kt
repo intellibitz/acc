@@ -2,22 +2,22 @@ package cc.thevar.acc.service
 
 import cc.thevar.acc.protocol.*
 import io.ktor.client.*
-import io.ktor.client.engine.*
 import io.ktor.client.engine.cio.*
+import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+import io.ktor.utils.io.*
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.*
 import org.slf4j.LoggerFactory
 import java.io.File
-import java.util.concurrent.ConcurrentHashMap
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.ConcurrentHashMap
 
 class ProvisioningService(
     private val projectRoot: File,
@@ -35,7 +35,6 @@ class ProvisioningService(
     val updates = _updates.asStateFlow()
 
     private val activeJobs = ConcurrentHashMap<String, Job>()
-    
     private val json = Json { ignoreUnknownKeys = true }
 
     fun provisionAll() {
@@ -43,6 +42,18 @@ class ProvisioningService(
         fleet.forEach { model ->
             startProvisioning(model)
         }
+    }
+
+    private fun updateStatus(
+        name: String, 
+        stage: ProvisioningStage, 
+        progress: Float = 0f, 
+        speed: String = "", 
+        message: String = ""
+    ) {
+        val current = _updates.value.toMutableMap()
+        current[name] = ProvisioningUpdate(name, stage, progress, speed, message)
+        _updates.value = current
     }
 
     fun startProvisioning(model: ModelManifest) {
@@ -85,27 +96,10 @@ class ProvisioningService(
                     updateStatus(model.name, ProvisioningStage.DOWNLOADING, 0.1f, message = "Downloading model...")
                     
                     val dlDir = File(projectRoot, ".cache/${model.name}").apply { mkdirs() }
+                    val targetFile = File(dlDir, model.filePattern.replace("*", "model")) 
                     
-                    val process = ProcessBuilder(
-                        "hf", "download", model.repo, 
-                        "--include", model.filePattern,
-                        "--local-dir", dlDir.absolutePath
-                    ).directory(projectRoot)
-                    .redirectErrorStream(true)
-                    .start()
-                    
-                    process.inputStream.bufferedReader().useLines { lines ->
-                        lines.forEach { line ->
-                            if (line.contains("%") || line.contains("MB/s")) {
-                                updateStatus(model.name, ProvisioningStage.DOWNLOADING, message = line.trim())
-                            }
-                        }
-                    }
-                    
-                    val exitCode = process.waitFor()
-                    if (exitCode != 0) {
-                        updateStatus(model.name, ProvisioningStage.ERROR, message = "Download failed (Code $exitCode)")
-                        return@launch
+                    downloadFile(model.repo, model.filePattern, targetFile) { progress, speed ->
+                        updateStatus(model.name, ProvisioningStage.DOWNLOADING, progress, message = speed)
                     }
 
                     updateStatus(model.name, ProvisioningStage.REGISTERING, 0.9f, message = "Building Ollama model...")
@@ -116,7 +110,6 @@ class ProvisioningService(
                     }
                     
                     updateStatus(model.name, ProvisioningStage.COMPLETED, 1.0f, message = "Ready.")
-                    // Cleanup download dir after success
                     dlDir.deleteRecursively()
                 } else {
                     updateStatus(model.name, ProvisioningStage.COMPLETED, 1.0f, message = "Already current.")
@@ -130,27 +123,39 @@ class ProvisioningService(
         activeJobs[model.name] = job
     }
 
-    private fun updateStatus(
-        name: String, 
-        stage: ProvisioningStage, 
-        progress: Float = 0f, 
-        speed: String = "", 
-        message: String = ""
-    ) {
-        val current = _updates.value.toMutableMap()
-        current[name] = ProvisioningUpdate(name, stage, progress, speed, message)
-        _updates.value = current
+    private suspend fun downloadFile(repo: String, filePattern: String, target: File, onProgress: (Float, String) -> Unit) {
+        val fileName = filePattern.replace("*", "Q4_K_M")
+        val url = "https://huggingface.co/$repo/resolve/main/$fileName"
+        
+        client.prepareGet(url).execute { response ->
+            if (response.status.value != 200) throw Exception("HF Download failed: ${response.status}")
+            
+            val contentLength = response.contentLength() ?: -1L
+            val channel = response.bodyAsChannel()
+            target.parentFile.mkdirs()
+            
+            target.outputStream().use { os ->
+                var totalBytes = 0L
+                val buffer = ByteArray(1024 * 1024)
+                while (!channel.isClosedForRead) {
+                    val read = channel.readAvailable(buffer)
+                    if (read > 0) {
+                        os.write(buffer, 0, read)
+                        totalBytes += read
+                        if (contentLength > 0) {
+                            onProgress(totalBytes.toFloat() / contentLength, "${totalBytes / 1024 / 1024} MB")
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private suspend fun registerInOllama(model: ModelManifest, optDir: File, dlDir: File) {
         val ggufFile = dlDir.walkTopDown().find { it.extension == "gguf" } ?: throw Exception("GGUF not found")
-        
-        // Use absolute host path
         val ollamaGgufPath = ggufFile.absolutePath
-        
         val threads = Runtime.getRuntime().availableProcessors().let { if (it > 4) it - 4 else it }
         val gpuLayers = calculateGpuLayers(model.name)
-        
         val paramFile = File(optDir, "user_params")
         val userParams = if (paramFile.exists()) paramFile.readText() else "PARAMETER temperature 0.7\nPARAMETER top_p 0.9"
         
@@ -167,7 +172,7 @@ class ProvisioningService(
 
         try {
             val response: HttpResponse = client.post("$ollamaHost/api/create") {
-                contentType(io.ktor.http.ContentType.Application.Json)
+                contentType(ContentType.Application.Json)
                 setBody(buildJsonObject {
                     put("name", model.name)
                     put("modelfile", modelfileContent)
@@ -204,7 +209,6 @@ class ProvisioningService(
         scope.launch {
             try {
                 val fleet = fleetManager.getFleet().map { it.name }.toSet()
-                
                 val response: HttpResponse = client.get("$ollamaHost/api/tags")
                 if (response.status.value == 200) {
                     val body = response.bodyAsText()
@@ -215,17 +219,15 @@ class ProvisioningService(
                         if (model.isNotEmpty() && !fleet.contains(model)) {
                             logger.info("[Prune] Removing unmanaged model: {}", model)
                             client.delete("$ollamaHost/api/delete") {
-                                contentType(io.ktor.http.ContentType.Application.Json)
+                                contentType(ContentType.Application.Json)
                                 setBody(buildJsonObject { put("name", model) })
                             }
                         }
                     }
                 }
-                
                 File(projectRoot, ".cache").listFiles()?.forEach { it.deleteRecursively() }
-                logger.info("[Prune] Fleet pruned and disk space reclaimed.")
             } catch (e: Exception) {
-                logger.error("[Prune] Error during prune: {}", e.message, e)
+                logger.error("[Prune] Error: {}", e.message)
             }
         }
     }
@@ -233,47 +235,17 @@ class ProvisioningService(
     fun backupConfig() {
         val ts = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))
         val backupDir = File(projectRoot, "data/backups/$ts").apply { mkdirs() }
-        
         try {
-            File(projectRoot, "config").listFiles()?.forEach { file ->
-                if (file.isFile) file.copyTo(File(backupDir, file.name))
-            }
+            File(projectRoot, "config").listFiles()?.forEach { if (it.isFile) it.copyTo(File(backupDir, it.name)) }
             File(projectRoot, "registry").copyRecursively(File(backupDir, "registry"), overwrite = true)
-            logger.info("[Backup] Configuration backed up to {}", backupDir.absolutePath)
         } catch (e: Exception) {
-            logger.error("[Backup] Error: {}", e.message, e)
-        }
-    }
-
-    fun autoScale() {
-        scope.launch {
-            try {
-                var vram = 0
-                try {
-                    val process = ProcessBuilder("nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits").start()
-                    vram = process.inputStream.bufferedReader().readLine()?.trim()?.toInt() ?: 0
-                } catch (e: Exception) {
-                    logger.debug("[AutoScale] nvidia-smi failed or not present: {}", e.message)
-                }
-
-                val ram = (Runtime.getRuntime().maxMemory() / (1024 * 1024 * 1024)).toInt() // GB approximate
-                
-                val tier = when {
-                    vram >= 40000 -> "ELITE"
-                    vram >= 16000 -> "STRONG"
-                    else -> "FAST"
-                }
-                logger.info("[AutoScale] VRAM: {}MB | RAM: {}GB | Target Tier: {}", vram, ram, tier)
-            } catch (e: Exception) {
-                logger.error("[AutoScale] Error: {}", e.message, e)
-            }
+            logger.error("[Backup] Error: {}", e.message)
         }
     }
 
     override fun close() {
-        logger.info("Closing ProvisioningService, cancelling active jobs...")
         activeJobs.values.forEach { it.cancel() }
-        scope.cancel("ProvisioningService closing")
+        scope.cancel()
         client.close()
     }
 }

@@ -22,7 +22,7 @@ We love your input! We want to make acc the best zero-effort AI orchestration to
 
 ## Coding Standards
 - **Shell**: Use `log` and `error` functions from `acc` for consistent output.
-- **Python**: Follow PEP 8. Use `litellm` for all model interactions.
+- **Kotlin**: Follow official Kotlin style guides. Use Koin for DI.
 - **Documentation**: Keep the `README.md` clean and visually consistent.
 
 ## Vision Check

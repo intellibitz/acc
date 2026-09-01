@@ -13,6 +13,8 @@ import java.io.File
 fun gatewayModule(projectRoot: File) = module {
     single { projectRoot }
     single { SessionManager() }
+    single { SystemBootstrapper(get()) }
+    single { SystemMetricsService(get()) }
     single {
         val proxyUrl = System.getenv("HTTP_PROXY") ?: System.getenv("http_proxy")
         HttpClient(CIO) {
@@ -27,6 +29,7 @@ fun gatewayModule(projectRoot: File) = module {
     single { FleetManager(File(get<File>(), "config")) }
     single { ProvisioningService(get(), get(), get()) }
     single { SupervisorService(get()) }
+    single { AgentService(get()) }
     single { CommandHandler(get(), get()) }
-    single { MonitoringService(get(), get(), get(), get()) }
+    single { MonitoringService(get(), get(), get(), get(), get(), get(), get()) }
 }

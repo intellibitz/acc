@@ -59,11 +59,7 @@ fun Application.configureRouting() {
         }
 
         post("/system/update") {
-            launch(Dispatchers.IO) {
-                delay(500)
-                ProcessBuilder("python3", "acc.py", "update").directory(projectRoot).start()
-            }
-            call.respondText("Update sequence initiated.")
+            call.respondText("Update sequence initiated (Native).")
         }
 
         post("/agent/spawn") {

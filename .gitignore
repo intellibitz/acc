@@ -69,16 +69,6 @@ Captures/
 .idea/assetWizardSettings.xml
 .idea/modules/
 
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-venv/
-.venv/
-.env
-pip-log.txt
-pip-delete-this-directory.txt
-
 # Models & Manifests
 *.gguf
 *.part*

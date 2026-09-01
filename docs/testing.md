@@ -4,7 +4,7 @@ Acc ensures reliability through automated protocol validation and environment au
 
 ## 📡 Protocol Integrity Tests
 Located in `:common:src:commonTest:kotlin:cc.thevar.acc.protocol.ProtocolTest`.
-These tests ensure that the shared data models between the **Intelligence Layer** (Python), **Control Plane** (Kotlin Gateway), and **Deck** (Compose UI) are binary-compatible and serialization-stable.
+These tests ensure that the shared data models between the **Control Plane** (Kotlin Gateway) and **Deck** (Compose UI) are binary-compatible and serialization-stable.
 
 To run:
 ```bash
@@ -12,21 +12,15 @@ To run:
 ```
 
 ## 📦 Sandbox & Deployment Verification
-With the pivot to a folder-sandbox architecture, ensure the Gateway JAR builds correctly:
+Ensure the Gateway JAR builds and runs correctly:
 
 ```bash
-./gradlew :gateway:assemble
-```
-
-Verify the bridge's platform-aware logic:
-```bash
-python3 brain/system_bridge.py
+./gradlew :gateway:run
 ```
 
 ## 🏗️ Hardware Audit
-The `python3 acc.py setup` command performs a universal audit on the host:
+The Manager performs a universal audit on startup:
 - **Java (JDK 21+)** availability.
-- **Python (3.10+)** and virtual environment integrity.
 - **Ollama** availability for local model execution.
 - **Network Routing** between the Gateway and AI engines.
 *Note: Setup and hardware optimization are host-level tasks and cannot be triggered from the UI for security reasons.*

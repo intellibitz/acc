@@ -22,6 +22,8 @@ tasks.processResources {
 
 dependencies {
     api(project(":common"))
+    implementation(libs.oshi.core)
+    implementation(libs.kotlinx.io)
     implementation(libs.logback)
     implementation(libs.koin.ktor)
     implementation(libs.koin.logger.slf4j)
