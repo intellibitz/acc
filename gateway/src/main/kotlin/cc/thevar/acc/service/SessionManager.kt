@@ -5,7 +5,6 @@ import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 
 class SessionManager {
-    val uiSessions = Collections.newSetFromMap(ConcurrentHashMap<DefaultWebSocketServerSession, Boolean>())
-    val systemSessions = Collections.newSetFromMap(ConcurrentHashMap<DefaultWebSocketServerSession, Boolean>())
-    var systemStatusMsg = "Initializing Acc..."
+    val uiSessions: MutableSet<DefaultWebSocketServerSession> = Collections.newSetFromMap(ConcurrentHashMap<DefaultWebSocketServerSession, Boolean>())
+    val systemSessions: MutableSet<DefaultWebSocketServerSession> = Collections.newSetFromMap(ConcurrentHashMap<DefaultWebSocketServerSession, Boolean>())
 }

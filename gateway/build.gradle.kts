@@ -13,6 +13,7 @@ val mainClassName = "cc.thevar.acc.ApplicationKt"
 
 tasks.register<JavaExec>("run") {
     group = "application"
+    description = "Runs the ACC Gateway server."
     mainClass.set(mainClassName)
     classpath = sourceSets["main"].runtimeClasspath
     standardInput = System.`in`
@@ -26,6 +27,7 @@ tasks.named<ShadowJar>("shadowJar") {
 }
 
 tasks.register<Copy>("copyWasmFrontend") {
+    description = "Copies the Wasm frontend distribution to the gateway resources."
     dependsOn(":frontend:web:wasmJsBrowserDistribution")
     from(project(":frontend:web").layout.buildDirectory.dir("dist/wasmJs/productionExecutable"))
     into(project.layout.buildDirectory.dir("resources/main/static"))

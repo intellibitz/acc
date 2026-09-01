@@ -1,30 +1,36 @@
 package cc.thevar.acc.service
 
 import cc.thevar.acc.protocol.*
-import org.slf4j.LoggerFactory
 import oshi.SystemInfo
-import oshi.hardware.GraphicsCard
 import java.io.File
 
 class SystemMetricsService(private val projectRoot: File) {
-    private val logger = LoggerFactory.getLogger(javaClass)
     private val si = SystemInfo()
     private val hardware = si.hardware
     private val cpu = hardware.processor
     private val memory = hardware.memory
     
     private var prevTicks = cpu.systemCpuLoadTicks
+    private var cachedDiskUsage = "0B"
+    private var lastDiskCheck = 0L
+    private val diskCheckInterval = 60_000L // 1 minute
 
     fun getSystemStats(): SystemStats {
         val cpuLoad = cpu.getSystemCpuLoadBetweenTicks(prevTicks) * 100.0
         prevTicks = cpu.systemCpuLoadTicks
+        
+        val now = System.currentTimeMillis()
+        if (now - lastDiskCheck > diskCheckInterval) {
+            cachedDiskUsage = getFleetDiskUsage()
+            lastDiskCheck = now
+        }
         
         return SystemStats(
             cpuUtilization = cpuLoad.toFloat().coerceIn(0f, 100f),
             ramUsed = ((memory.total - memory.available) / (1024.0 * 1024.0 * 1024.0)).toFloat(),
             ramTotal = (memory.total / (1024.0 * 1024.0 * 1024.0)).toFloat(),
             gpu = getGpuStats(),
-            diskUsage = getFleetDiskUsage()
+            diskUsage = cachedDiskUsage
         )
     }
 
