@@ -13,16 +13,7 @@ plugins {
     alias(libs.plugins.shadow) apply false
 }
 
-fun getAppVersion(): String = project.property("appVersion") as String
-
-fun updateAppVersion(newVersion: String) {
-    val propsFile = file("gradle.properties")
-    val props = Properties()
-    props.load(propsFile.inputStream())
-    props["appVersion"] = newVersion
-    props.store(propsFile.outputStream(), "Updated by release task")
-}
-
+// Configuration cache compatible versioning helper
 fun incrementVersion(version: String, isTest: Boolean): String {
     val isCurrentlyTest = version.contains("-test.")
     val base = version.split("-")[0]
@@ -46,24 +37,23 @@ fun incrementVersion(version: String, isTest: Boolean): String {
     }
 }
 
-fun git(vararg args: String) {
-    val process = ProcessBuilder("git", *args)
-        .redirectErrorStream(true)
-        .start()
-    val output = process.inputStream.bufferedReader().readText()
-    val exitCode = process.waitFor()
-    if (exitCode != 0) {
-        throw GradleException("Git command failed with exit code $exitCode: $output")
-    }
-}
-
 tasks.register("releaseTest") {
     group = "publishing"
     description = "Increments version for test and pushes tag to GitHub."
+    val propsFile = layout.projectDirectory.file("gradle.properties").asFile
     doLast {
-        val current = getAppVersion()
+        val props = Properties()
+        props.load(propsFile.inputStream())
+        val current = props["appVersion"] as String
         val next = incrementVersion(current, true)
-        updateAppVersion(next)
+        props["appVersion"] = next
+        props.store(propsFile.outputStream(), "Updated by release task")
+
+        // Manual ProcessBuilder to avoid configuration cache issues with project.exec
+        fun git(vararg args: String) {
+            val pb = ProcessBuilder("git", *args).inheritIO().start()
+            if (pb.waitFor() != 0) throw GradleException("Git command failed: ${args.joinToString(" ")}")
+        }
 
         git("add", "gradle.properties")
         git("commit", "-m", "chore: bump version to $next [test]")
@@ -77,10 +67,20 @@ tasks.register("releaseTest") {
 tasks.register("releaseProduction") {
     group = "publishing"
     description = "Increments version for production and pushes tag to GitHub."
+    val propsFile = layout.projectDirectory.file("gradle.properties").asFile
     doLast {
-        val current = getAppVersion()
+        val props = Properties()
+        props.load(propsFile.inputStream())
+        val current = props["appVersion"] as String
         val next = incrementVersion(current, false)
-        updateAppVersion(next)
+        props["appVersion"] = next
+        props.store(propsFile.outputStream(), "Updated by release task")
+
+        // Manual ProcessBuilder to avoid configuration cache issues with project.exec
+        fun git(vararg args: String) {
+            val pb = ProcessBuilder("git", *args).inheritIO().start()
+            if (pb.waitFor() != 0) throw GradleException("Git command failed: ${args.joinToString(" ")}")
+        }
 
         git("add", "gradle.properties")
         git("commit", "-m", "chore: bump version to $next [production]")
@@ -97,26 +97,9 @@ tasks.register<Exec>("pushToGitHub") {
     commandLine("git", "push", "origin", "HEAD")
 }
 
-tasks.register("syncToGitHub") {
+tasks.register<Exec>("syncToGitHub") {
     group = "publishing"
     description = "Automatically adds, commits (generic message), and pushes all changes to GitHub."
-    doLast {
-        // 1. Add everything
-        git("add", ".")
-
-        // 2. Try to commit (ignore error if nothing to commit)
-        try {
-            git("commit", "-m", "chore: automated sync to GitHub")
-        } catch (e: Exception) {
-            if (e.message?.contains("nothing to commit") == true) {
-                println("Nothing to commit, proceeding to push.")
-            } else {
-                throw e
-            }
-        }
-
-        // 3. Push
-        git("push", "origin", "HEAD")
-        println("Successfully synced changes to GitHub.")
-    }
+    // We use bash to chain commands and handle the 'nothing to commit' case gracefully
+    commandLine("bash", "-c", "git add . && (git commit -m 'chore: automated sync to GitHub' || true) && git push origin HEAD")
 }
