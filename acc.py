@@ -24,21 +24,21 @@ DATA_DIR = PROJECT_ROOT / "data"
 def log(msg): print(f"[\033[1;34macc\033[0m] {msg}")
 def error(msg): print(f"[\033[1;31merror\033[0m] {msg}", file=sys.stderr)
 
-def run_shell(cmd, cwd=PROJECT_ROOT, check=True, capture=False, sudo=False):
+def run_cmd(cmd_list, cwd=PROJECT_ROOT, check=True, capture=False, sudo=False, input_data=None):
     if sudo and platform.system() != "Windows":
-        cmd = f"sudo {cmd}"
+        cmd_list = ["sudo"] + cmd_list
     try:
-        result = subprocess.run(cmd, shell=True, cwd=str(cwd), check=check, 
-                                capture_output=capture, text=True)
+        result = subprocess.run(cmd_list, cwd=str(cwd), check=check, 
+                                capture_output=capture, text=True, input=input_data)
         return result.stdout.strip() if capture else result.returncode
     except subprocess.CalledProcessError as e:
-        if not capture: error(f"Command failed: {cmd}")
+        if not capture: error(f"Command failed: {' '.join(cmd_list)}")
         raise e
 
 def ensure_system_deps():
     log("Auditing system dependencies...")
     missing = []
-    for cmd in ["java", "python3", "jq", "curl"]:
+    for cmd in ["java", "python3"]:
         if not shutil.which(cmd): missing.append(cmd)
     
     if missing:
@@ -54,15 +54,16 @@ def tune_hardware():
     try:
         # 1. CPU Governor
         if shutil.which("cpupower"):
-            run_shell("cpupower frequency-set -g performance", sudo=True)
+            run_cmd(["cpupower", "frequency-set", "-g", "performance"], sudo=True)
         
         # 2. GPU Persistence
         if shutil.which("nvidia-smi"):
-            run_shell("nvidia-smi -pm 1", sudo=True)
+            run_cmd(["nvidia-smi", "-pm", "1"], sudo=True)
 
         # 3. Kernel VM Tuning
-        run_shell('echo "vm.swappiness=1" | tee /etc/sysctl.d/99-llm-hw.conf', sudo=True)
-        run_shell('sysctl -p /etc/sysctl.d/99-llm-hw.conf', sudo=True)
+        config_path = "/etc/sysctl.d/99-llm-hw.conf"
+        run_cmd(["tee", config_path], input_data='vm.swappiness=1\n', sudo=True)
+        run_cmd(["sysctl", "-p", config_path], sudo=True)
         log("[SUCCESS] Hardware optimized.")
     except Exception as e:
         error(f"Tuning failed: {str(e)}")
@@ -76,17 +77,19 @@ def setup_env():
     # Ensure python dependencies
     if not (PROJECT_ROOT / ".venv").exists():
         log("Creating virtual environment...")
-        run_shell("python3 -m venv .venv")
+        run_cmd(["python3", "-m", "venv", ".venv"])
         log("Installing Python dependencies...")
-        run_shell("./.venv/bin/pip install -r requirements.txt huggingface-hub")
+        pip_path = PROJECT_ROOT / ".venv" / "bin" / "pip"
+        run_cmd([str(pip_path), "install", "-r", "requirements.txt", "huggingface-hub"])
 
     keystore = CONFIG_DIR / "keystore.p12"
     if not keystore.exists():
         log("Generating secure local identity...")
         if shutil.which("keytool"):
-            run_shell(f'keytool -genkeypair -alias acc -keyalg RSA -keysize 2048 -storetype PKCS12 '
-                      f'-keystore "{keystore}" -validity 365 -storepass password -keypass password '
-                      f'-dname "CN=localhost, OU=acc, O=intellibitz, L=Unknown, ST=Unknown, C=Unknown"')
+            run_cmd(["keytool", "-genkeypair", "-alias", "acc", "-keyalg", "RSA", "-keysize", "2048", 
+                     "-storetype", "PKCS12", "-keystore", str(keystore), "-validity", "365", 
+                     "-storepass", "password", "-keypass", "password", 
+                     "-dname", "CN=localhost, OU=acc, O=intellibitz, L=Unknown, ST=Unknown, C=Unknown"])
         else:
             log("[SKIP] 'keytool' not found. Skipping keystore generation.")
 
@@ -105,18 +108,18 @@ def smart_start():
     jar_path = PROJECT_ROOT / "gateway/build/libs/gateway-1.0.0.jar"
     if not jar_path.exists():
         log("Gateway JAR not found. Building...")
-        run_shell("./gradlew :gateway:assemble")
+        run_cmd(["./gradlew", ":gateway:assemble"])
 
     # Start Gateway in background
     log("Starting Gateway...")
-    cmd = f"java -jar {jar_path}"
+    cmd = ["java", "-jar", str(jar_path)]
     env = os.environ.copy()
     env["ACC_ROOT"] = str(PROJECT_ROOT)
     
     # We'll use a simple pid file for tracking
     pid_file = PROJECT_ROOT / ".gateway.pid"
     with open(LOGS_DIR / "gateway.log", "w") as log_file:
-        proc = subprocess.Popen(cmd.split(), cwd=str(PROJECT_ROOT), env=env, 
+        proc = subprocess.Popen(cmd, cwd=str(PROJECT_ROOT), env=env, 
                                stdout=log_file, stderr=subprocess.STDOUT)
         with open(pid_file, "w") as f:
             f.write(str(proc.pid))
@@ -137,7 +140,7 @@ def handle_dev_commands(args):
     import re
     if args.dev == "test":
         try:
-            current_tag = run_shell("git describe --tags --abbrev=0", capture=True)
+            current_tag = run_cmd(["git", "describe", "--tags", "--abbrev=0"], capture=True)
         except:
             current_tag = "v0.0.0"
         
@@ -153,35 +156,35 @@ def handle_dev_commands(args):
             next_tag = f"v{parts[0]}.{parts[1]}.{parts[2]}-test.1"
         
         log(f"Tagging Test Release: {next_tag}")
-        run_shell(f'git tag -a "{next_tag}" -m "Test Release {next_tag}"')
-        run_shell(f'git push origin "{next_tag}"')
+        run_cmd(["git", "tag", "-a", next_tag, "-m", f"Test Release {next_tag}"])
+        run_cmd(["git", "push", "origin", next_tag])
 
     elif args.dev == "release":
-        current_tag = run_shell("git describe --tags --abbrev=0", capture=True) or "v0.0.0"
+        current_tag = run_cmd(["git", "describe", "--tags", "--abbrev=0"], capture=True) or "v0.0.0"
         parts = list(map(int, (re.search(r'(\d+\.\d+\.\d+)', current_tag).group(1)).split('.')))
         next_version = f"v{parts[0]}.{parts[1] + 1}.0"
         
         log(f"Creating Stable Release: {next_version}")
         branch = f"release/{next_version}"
-        run_shell(f"git checkout -b {branch}")
+        run_cmd(["git", "checkout", "-b", branch])
         
         notes = f"# Release {next_version}\n\n## Changes\n"
-        notes += run_shell(f'git log {current_tag}..HEAD --oneline --pretty=format:"* %s"', capture=True)
+        notes += run_cmd(["git", "log", f"{current_tag}..HEAD", "--oneline", '--pretty=format:* %s'], capture=True)
         with open(PROJECT_ROOT / "RELEASE_NOTES.md", "w") as f: f.write(notes)
         
-        run_shell("git add RELEASE_NOTES.md")
-        run_shell(f'git commit -m "docs: release notes for {next_version}"')
-        run_shell(f'git tag -a "{next_version}" -m "Stable Release {next_version}"')
-        run_shell(f"git push origin {branch} --tags")
+        run_cmd(["git", "add", "RELEASE_NOTES.md"])
+        run_cmd(["git", "commit", "-m", f"docs: release notes for {next_version}"])
+        run_cmd(["git", "tag", "-a", next_version, "-m", f"Stable Release {next_version}"])
+        run_cmd(["git", "push", "origin", branch, "--tags"])
 
     elif args.dev == "push":
         log("Auto-staging and pushing changes...")
-        run_shell("git add .")
+        run_cmd(["git", "add", "."])
         # Check if there are changes to commit
-        status = run_shell("git status --porcelain", capture=True)
+        status = run_cmd(["git", "status", "--porcelain"], capture=True)
         if status:
-            run_shell('git commit -m "feat: architectural refactor and project reorganization"')
-            run_shell("git push")
+            run_cmd(["git", "commit", "-m", "feat: architectural refactor and project reorganization"])
+            run_cmd(["git", "push"])
             log("[SUCCESS] Changes pushed to GitHub.")
         else:
             log("[INFO] No changes to push.")
@@ -201,8 +204,10 @@ def main():
         url = "http://localhost:8333/provisioning/up"
         if args.subcommand: url += f"?model={args.subcommand}"
         try:
-            run_shell(f'curl -skX POST "{url}"')
-        except: error("Gateway not responding. Is Acc running?")
+            import requests
+            requests.post(url, timeout=5)
+        except Exception as e:
+            error(f"Gateway not responding. Is Acc running? ({e})")
     elif args.command == "stop":
         log("Stopping Acc processes...")
         pid_file = PROJECT_ROOT / ".gateway.pid"
@@ -217,9 +222,21 @@ def main():
             pid_file.unlink()
         
         # Kill any remaining agents/bridges
-        if platform.system() != "Windows":
-            run_shell("pkill -f 'brain/system_bridge.py' || true")
-            run_shell("pkill -f 'brain/agent_bridge.py' || true")
+        import psutil
+        for proc in psutil.process_iter(['pid', 'cmdline']):
+            try:
+                cmdline = proc.info['cmdline']
+                if cmdline:
+                    should_kill = False
+                    for arg in cmdline:
+                        if 'brain/system_bridge.py' in arg or 'brain/agent_bridge.py' in arg:
+                            should_kill = True
+                            break
+                    if should_kill:
+                        log(f"Terminating background process: {proc.info['pid']}")
+                        proc.terminate()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
         log("[SUCCESS] Processes stopped.")
     elif args.command == "uninstall":
         if (PROJECT_ROOT / ".git").exists():

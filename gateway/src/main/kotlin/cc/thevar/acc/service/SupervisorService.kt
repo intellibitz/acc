@@ -103,11 +103,8 @@ class SupervisorService(private val projectRoot: File) : AutoCloseable {
     }
 
     private fun isOllamaRunning(): Boolean {
-        return try {
-            val process = ProcessBuilder("pgrep", "-f", "ollama serve").start()
-            process.waitFor() == 0
-        } catch (e: Exception) {
-            false
+        return ProcessHandle.allProcesses().anyMatch { ph ->
+            ph.info().commandLine().map { it.contains("ollama serve") }.orElse(false)
         }
     }
 

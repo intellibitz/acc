@@ -21,16 +21,16 @@ def log(msg, to_file=True):
         with open(LOG_FILE, "a") as f:
             f.write(formatted + "\n")
 
-def run_cmd(cmd, capture=True):
+def run_cmd(cmd_list, capture=True):
     try:
-        result = subprocess.run(cmd, shell=True, capture_output=capture, text=True, check=True)
-        return result.stdout.strip()
-    except subprocess.CalledProcessError as e:
+        result = subprocess.run(cmd_list, capture_output=capture, text=True, check=True)
+        return result.stdout.strip() if capture else ""
+    except (subprocess.CalledProcessError, FileNotFoundError):
         return None
 
 def check_model():
     log(f"[TEST] Verifying model '{MODEL}' in registry...")
-    output = run_cmd("ollama list")
+    output = run_cmd(["ollama", "list"])
     if output and MODEL in output:
         log("[PASS] Model found.")
         return True
@@ -71,7 +71,7 @@ def check_system():
 
 def check_gpu():
     log("[TEST] Verifying GPU Offloading Configuration...")
-    output = run_cmd(f"ollama show {MODEL} --modelfile")
+    output = run_cmd(["ollama", "show", MODEL, "--modelfile"])
     if output:
         import re
         match = re.search(r"num_gpu\s+(\d+)", output)
@@ -85,9 +85,7 @@ def check_gpu():
 
 def run_intelligence_test(name, prompt, keywords):
     log(f"[TEST] Running Intelligence Test: {name}...")
-    # Escape quotes for shell
-    safe_prompt = prompt.replace('"', '\\"')
-    response = run_cmd(f'ollama run {MODEL} "{safe_prompt}"')
+    response = run_cmd(["ollama", "run", MODEL, prompt])
     
     if not response:
         log("[FAIL] No response from model.")

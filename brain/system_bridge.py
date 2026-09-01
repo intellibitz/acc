@@ -35,6 +35,25 @@ def get_gpu_stats():
 
     return {"utilization": 0, "memoryUsed": 0, "memoryTotal": 0, "temperature": 0, "power": 0, "active": False, "type": "CPU"}
 
+def get_size_format(b, factor=1024, suffix="B"):
+    for unit in ["", "K", "M", "G", "T", "P"]:
+        if b < factor:
+            if unit == "": return f"{b}{unit}{suffix}"
+            return f"{b:.1f}{unit}{suffix}"
+        b /= factor
+    return f"{b:.1f}P{suffix}"
+
+def get_directory_size(path):
+    total_size = 0
+    try:
+        for dirpath, dirnames, filenames in os.walk(path):
+            for f in filenames:
+                fp = os.path.join(dirpath, f)
+                if not os.path.islink(fp):
+                    total_size += os.path.getsize(fp)
+    except: pass
+    return total_size
+
 def get_fleet_disk_usage():
     try:
         # Platform-aware path detection
@@ -49,9 +68,9 @@ def get_fleet_disk_usage():
                 ollama_dir = os.path.expanduser("~/.ollama/models")
 
         if not os.path.exists(ollama_dir): return "0B"
-        process = subprocess.Popen(["du", "-sh", ollama_dir], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        out, _ = process.communicate()
-        return out.decode().split()[0]
+        
+        disk_bytes = get_directory_size(ollama_dir)
+        return get_size_format(disk_bytes)
     except: return "ERR"
 
 def get_ollama_status():

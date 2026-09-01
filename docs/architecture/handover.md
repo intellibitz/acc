@@ -24,7 +24,8 @@ To keep the "Zero-Effort" promise to Normal Users, we use a fully automated rele
 - [x] Pivot to **"Folder-Sandbox" Architecture**.
 - [x] Implement integrated `acc uninstall` (Safe data purge).
 - [x] distribution artifacts support.
-- [x] Purge all legacy Docker technical debt.
+- [x] Purge all legacy Docker, Bash and PowerShell technical debt.
+- [x] 0 Shell Dependency Architecture (Migrated all scripts to Python/Kotlin).
 - [x] Engine-on-Demand: Control local engines (Ollama) from the UI via APIs.
 - [x] API-driven Zero-Footprint Provisioning.
 - [ ] Implement integrated E2E journey tests for the Provisioning flow.

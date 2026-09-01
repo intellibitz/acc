@@ -61,7 +61,7 @@ fun Application.configureRouting() {
         post("/system/update") {
             launch(Dispatchers.IO) {
                 delay(500)
-                ProcessBuilder("./acc", "update").directory(projectRoot).start()
+                ProcessBuilder("python3", "acc.py", "update").directory(projectRoot).start()
             }
             call.respondText("Update sequence initiated.")
         }
