@@ -1,14 +1,28 @@
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+
 plugins {
     alias(libs.plugins.kotlinJvm)
     alias(libs.plugins.shadow)
-    application
+    // Removed application plugin to avoid broken shadow distribution tasks in Gradle 8+
 }
 
 group = "cc.thevar.acc"
 version = project.property("appVersion") as String
 
-application {
-    mainClass.set("cc.thevar.acc.ApplicationKt")
+val mainClassName = "cc.thevar.acc.ApplicationKt"
+
+tasks.register<JavaExec>("run") {
+    group = "application"
+    mainClass.set(mainClassName)
+    classpath = sourceSets["main"].runtimeClasspath
+    standardInput = System.`in`
+}
+
+tasks.named<ShadowJar>("shadowJar") {
+    archiveClassifier.set("all")
+    manifest {
+        attributes["Main-Class"] = mainClassName
+    }
 }
 
 tasks.register<Copy>("copyWasmFrontend") {

@@ -36,7 +36,7 @@ class SystemMetricsService(private val projectRoot: File) {
         return GpuStats(
             utilization = 0f,
             memoryUsed = 0f,
-            memoryTotal = (primary.vram / (1024f * 1024f * 1024f)),
+            memoryTotal = (primary.vRam / (1024f * 1024f * 1024f)),
             temperature = 0f,
             power = 0f,
             active = true

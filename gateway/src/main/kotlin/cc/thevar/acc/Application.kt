@@ -75,13 +75,13 @@ fun main() {
 }
 
 fun Application.module() {
-    val bootstrapper by inject<SystemBootstrapper>()
-    bootstrapper.bootstrap()
-
     install(Koin) {
         slf4jLogger()
         modules(gatewayModule(projectRoot))
     }
+
+    val bootstrapper by inject<SystemBootstrapper>()
+    bootstrapper.bootstrap()
 
     install(Authentication) {
         basic("auth-basic") {
