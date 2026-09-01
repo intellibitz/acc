@@ -6,6 +6,8 @@
 FROM eclipse-temurin:21-jdk-jammy AS builder
 WORKDIR /app
 COPY . .
+# Install libatomic1 for Node.js (required by Kotlin/Wasm build)
+RUN apt-get update && apt-get install -y libatomic1 && rm -rf /var/lib/apt/lists/*
 RUN ./gradlew :frontend:web:wasmJsBrowserDistribution --no-daemon
 
 # Stage 2: Build the Gateway JAR
