@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import cc.thevar.acc.protocol.AgentMessage
 import cc.thevar.acc.protocol.AgentStatus
 import io.ktor.client.*
+import io.ktor.client.plugins.auth.*
+import io.ktor.client.plugins.auth.providers.*
 import io.ktor.client.plugins.websocket.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.*
@@ -25,6 +27,19 @@ class AgentViewModel : ViewModel() {
         }
         install(ContentNegotiation) {
             json()
+        }
+        install(Auth) {
+            basic {
+                credentials {
+                    val creds = AuthStore.credentials.value
+                    if (creds != null) {
+                        BasicAuthCredentials(creds.first, creds.second)
+                    } else {
+                        null
+                    }
+                }
+                sendWithoutRequest { true }
+            }
         }
     }
 

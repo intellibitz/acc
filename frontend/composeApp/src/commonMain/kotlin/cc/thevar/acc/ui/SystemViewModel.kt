@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cc.thevar.acc.protocol.SystemState
 import io.ktor.client.*
+import io.ktor.client.plugins.auth.*
+import io.ktor.client.plugins.auth.providers.*
 import io.ktor.client.plugins.websocket.*
 import io.ktor.client.request.*
 import io.ktor.websocket.*
@@ -18,6 +20,19 @@ class SystemViewModel : ViewModel() {
 
     private val client = HttpClient {
         install(WebSockets)
+        install(Auth) {
+            basic {
+                credentials {
+                    val creds = AuthStore.credentials.value
+                    if (creds != null) {
+                        BasicAuthCredentials(creds.first, creds.second)
+                    } else {
+                        null
+                    }
+                }
+                sendWithoutRequest { true }
+            }
+        }
     }
 
     fun connect(host: String = getPlatform().defaultGatewayHost, port: Int = 8333) {

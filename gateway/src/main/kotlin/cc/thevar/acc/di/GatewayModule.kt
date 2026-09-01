@@ -2,6 +2,7 @@ package cc.thevar.acc.di
 
 import cc.thevar.acc.service.*
 import io.ktor.client.*
+import io.ktor.client.engine.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
@@ -13,7 +14,11 @@ fun gatewayModule(projectRoot: File) = module {
     single { projectRoot }
     single { SessionManager() }
     single {
+        val proxyUrl = System.getenv("HTTP_PROXY") ?: System.getenv("http_proxy")
         HttpClient(CIO) {
+            engine {
+                proxyUrl?.let { proxy = ProxyBuilder.http(it) }
+            }
             install(ContentNegotiation) {
                 json(Json { ignoreUnknownKeys = true })
             }

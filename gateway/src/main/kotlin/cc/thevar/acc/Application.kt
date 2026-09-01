@@ -6,6 +6,7 @@ import cc.thevar.acc.service.MonitoringService
 import io.ktor.serialization.kotlinx.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
+import io.ktor.server.auth.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.server.plugins.contentnegotiation.*
@@ -76,6 +77,21 @@ fun Application.module() {
     install(Koin) {
         slf4jLogger()
         modules(gatewayModule(projectRoot))
+    }
+
+    install(Authentication) {
+        basic("auth-basic") {
+            realm = "Access to the 'acc' Gateway"
+            validate { credentials ->
+                val user = System.getenv("ACC_USER") ?: "admin"
+                val password = System.getenv("ACC_PASSWORD") ?: "password"
+                if (credentials.name == user && credentials.password == password) {
+                    UserIdPrincipal(credentials.name)
+                } else {
+                    null
+                }
+            }
+        }
     }
 
     install(WebSockets) {

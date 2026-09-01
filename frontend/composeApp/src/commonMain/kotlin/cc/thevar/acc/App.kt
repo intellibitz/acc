@@ -22,13 +22,27 @@ fun App() {
     val systemState by systemVm.state.collectAsState()
     val consoleLines by consoleVm.lines.collectAsState()
 
-    LaunchedEffect(Unit) {
-        agentVm.connect()
-        systemVm.connect()
-        consoleVm.connect()
+    val authState by AuthStore.credentials.collectAsState()
+    var showLogin by remember { mutableStateOf(false) }
+
+    LaunchedEffect(authState) {
+        if (authState != null) {
+            agentVm.connect()
+            systemVm.connect()
+            consoleVm.connect()
+        } else {
+            showLogin = true
+        }
     }
 
     AccTheme {
+        if (showLogin) {
+            LoginDialog(onLogin = { user, pass ->
+                AuthStore.setCredentials(user, pass)
+                showLogin = false
+            })
+        }
+
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             topBar = {

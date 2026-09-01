@@ -4,6 +4,7 @@ import cc.thevar.acc.protocol.*
 import cc.thevar.acc.service.*
 import io.ktor.http.*
 import io.ktor.server.application.*
+import io.ktor.server.auth.*
 import io.ktor.server.http.content.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
@@ -26,7 +27,8 @@ fun Application.configureRouting() {
     val sessionManager by inject<SessionManager>()
 
     routing {
-        get("/health") {
+        authenticate("auth-basic") {
+            get("/health") {
             val states = supervisorService.workerStates.value
             val isHealthy = states.all { 
                 it.status == WorkerStatus.RUNNING || 
@@ -136,6 +138,7 @@ fun Application.configureRouting() {
                 }
             } finally { }
         }
+        } // End authenticate
 
         val staticDir = File(projectRoot, "frontend/web/build/dist/wasmJs/productionExecutable")
 

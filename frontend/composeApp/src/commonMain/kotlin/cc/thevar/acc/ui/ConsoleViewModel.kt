@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cc.thevar.acc.protocol.ConsoleLine
 import io.ktor.client.*
+import io.ktor.client.plugins.auth.*
+import io.ktor.client.plugins.auth.providers.*
 import io.ktor.client.plugins.websocket.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.flow.*
@@ -17,6 +19,19 @@ class ConsoleViewModel : ViewModel() {
 
     private val client = HttpClient {
         install(WebSockets)
+        install(Auth) {
+            basic {
+                credentials {
+                    val creds = AuthStore.credentials.value
+                    if (creds != null) {
+                        BasicAuthCredentials(creds.first, creds.second)
+                    } else {
+                        null
+                    }
+                }
+                sendWithoutRequest { true }
+            }
+        }
     }
     private var session: DefaultClientWebSocketSession? = null
 

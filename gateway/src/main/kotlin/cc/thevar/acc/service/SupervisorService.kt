@@ -69,6 +69,12 @@ class SupervisorService(private val projectRoot: File) : AutoCloseable {
     }
 
     fun startEngine(provider: String) {
+        val useLocal = System.getenv("ACC_USE_LOCAL_ENGINE") == "true"
+        if (useLocal && provider == "ollama") {
+            logger.info("Using local Ollama engine as requested (ACC_USE_LOCAL_ENGINE=true)")
+            return
+        }
+
         scope.launch {
             try {
                 logger.info("Starting engine provider: {}", provider)
