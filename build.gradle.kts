@@ -107,7 +107,7 @@ tasks.register<Exec>("pushToGitHub") {
     commandLine("git", "push", "origin", "HEAD")
 }
 
-tasks.register<Exec>("syncToGitHub") {
+tasks.register<Exec>("githubSync") {
     group = "publishing"
     description = "Automatically adds, commits, and pushes all changes to GitHub (handles protected main branch)."
     val script = """
@@ -148,7 +148,7 @@ tasks.register<Exec>("githubOpen") {
 tasks.register<Exec>("githubFeature") {
     group = "github"
     description = "Syncs current work, then creates a new timestamped feature branch and pushes it to origin."
-    dependsOn("syncToGitHub")
+    dependsOn("githubSync")
     val suffix = if (project.hasProperty("name")) "-${project.property("name")}" else ""
     val script = """
         BRANCH_NAME="feature/${'$'}(date +%Y%m%d-%H%M%S)$suffix"
@@ -161,21 +161,21 @@ tasks.register<Exec>("githubFeature") {
 tasks.register<Exec>("githubMain") {
     group = "github"
     description = "Syncs current work, then switches back to the 'main' branch and pulls latest from origin."
-    dependsOn("syncToGitHub")
+    dependsOn("githubSync")
     commandLine("bash", "-c", "git checkout main && git fetch origin main && git reset --hard origin/main")
 }
 
 tasks.register<Exec>("githubPR") {
     group = "github"
-    description = "Syncs current work, then creates a Pull Request for the current branch to 'main'."
-    dependsOn("syncToGitHub")
-    commandLine("gh", "pr", "create", "--fill")
+    description = "Syncs current work, then creates a Pull Request for the current branch to 'main' (idempotent)."
+    dependsOn("githubSync")
+    commandLine("bash", "-c", "gh pr create --fill || echo 'PR already exists or no changes to push.'")
 }
 
 tasks.register<Exec>("githubMerge") {
     group = "github"
     description = "Syncs all changes, then merges the current PR to 'main' automatically (requires 'Allow auto-merge' in repo settings)."
-    dependsOn("syncToGitHub")
+    dependsOn("githubPR")
     commandLine("gh", "pr", "merge", "--auto", "--squash", "--delete-branch")
 }
 
