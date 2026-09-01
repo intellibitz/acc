@@ -89,6 +89,11 @@ fun Application.module() {
             validate { credentials ->
                 val user = System.getenv("ACC_USER") ?: "admin"
                 val password = System.getenv("ACC_PASSWORD") ?: "password"
+                
+                if (user == "admin" && password == "password") {
+                    logger.warn("CRITICAL: Running with default credentials! Set ACC_USER and ACC_PASSWORD.")
+                }
+
                 if (credentials.name == user && credentials.password == password) {
                     UserIdPrincipal(credentials.name)
                 } else {

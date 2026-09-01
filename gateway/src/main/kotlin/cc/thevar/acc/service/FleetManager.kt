@@ -3,7 +3,6 @@ package cc.thevar.acc.service
 import cc.thevar.acc.protocol.ModelManifest
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.encodeToString
 import java.io.File
 
 @Serializable
