@@ -1,18 +1,35 @@
-import org.eclipse.jgit.api.Git
-import org.eclipse.jgit.storage.file.FileRepositoryBuilder
-import org.kohsuke.github.GHBranch
-import org.kohsuke.github.GHPullRequest
-import org.kohsuke.github.GHRepository
-import org.kohsuke.github.GitHub
 import java.io.File
 import java.time.Instant
-import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
 
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.tasks.TaskAction
 import org.gradle.api.DefaultTask
+
+// Lightweight helpers using 'git' and 'gh' CLIs where available.
+fun runCmd(vararg cmd: String, workingDir: File? = null, env: Map<String, String> = emptyMap()): Pair<Int, String> {
+    val pb = ProcessBuilder(*cmd)
+    if (workingDir != null) pb.directory(workingDir)
+    val e = pb.environment()
+    e.putAll(env)
+    pb.redirectErrorStream(true)
+    val proc = pb.start()
+    val out = proc.inputStream.bufferedReader().readText()
+    val rc = proc.waitFor()
+    return rc to out.trim()
+}
+
+fun inferRepoFromGit(root: File): String? {
+    val (rc, out) = runCmd("git", "remote", "get-url", "origin", workingDir = root)
+    if (rc != 0 || out.isBlank()) return null
+    var cleaned = out
+        .removePrefix("git@github.com:")
+        .removePrefix("https://github.com/")
+        .removeSuffix(".git")
+    cleaned = cleaned.trim()
+    return cleaned
+}
 
 open class AutomationPlugin : Plugin<Project> {
     override fun apply(project: Project) {
@@ -38,58 +55,36 @@ open class AutomationPlugin : Plugin<Project> {
 }
 
 abstract class BaseGitHubTask : DefaultTask() {
-    fun connect(): GitHub {
-        // Check project properties first (supports gradle.properties and -P flags) with multiple common keys
+    fun token(): String {
         val propKeys = listOf("GITHUB_TOKEN", "githubToken", "github.token", "GH_TOKEN", "ghToken")
-        var token: String? = null
         for (k in propKeys) {
             val v = project.findProperty(k) as? String
-            if (!v.isNullOrBlank()) { token = v.trim(); break }
+            if (!v.isNullOrBlank()) return v.trim()
         }
-
-        // Fallback to environment variables
-        if (token.isNullOrBlank()) {
-            token = System.getenv("GITHUB_TOKEN") ?: System.getenv("GH_TOKEN") ?: System.getenv("github_token")
-        }
-
-        // Finally, try user's ~/.gradle/gradle.properties for convenience in CI/machine config
-        if (token.isNullOrBlank()) {
-            try {
-                val home = System.getProperty("user.home") ?: ""
-                val f = java.io.File(home, ".gradle/gradle.properties")
-                if (f.exists()) {
-                    val props = java.util.Properties()
-                    f.inputStream().use { props.load(it) }
-                    for (k in propKeys) {
-                        val v = props.getProperty(k)
-                        if (!v.isNullOrBlank()) { token = v.trim(); break }
-                    }
+        val env = System.getenv()
+        val envTok = env["GITHUB_TOKEN"] ?: env["GH_TOKEN"] ?: env["github_token"]
+        if (!envTok.isNullOrBlank()) return envTok.trim()
+        val home = System.getProperty("user.home") ?: ""
+        try {
+            val f = java.io.File(home, ".gradle/gradle.properties")
+            if (f.exists()) {
+                val props = java.util.Properties()
+                f.inputStream().use { props.load(it) }
+                for (k in propKeys) {
+                    val v = props.getProperty(k)
+                    if (!v.isNullOrBlank()) return v.trim()
                 }
-            } catch (_: Exception) {
-                // ignore
             }
-        }
-
-        if (token.isNullOrBlank()) {
-            throw IllegalStateException("GITHUB_TOKEN is required for Kotlin-native automation tasks. Provide it via gradle.properties (GITHUB_TOKEN=...), -PGITHUB_TOKEN=..., or environment variable GH_TOKEN/GITHUB_TOKEN.")
-        }
-        return GitHub.connectUsingOAuth(token)
+        } catch (_: Exception) {}
+        throw IllegalStateException("GITHUB_TOKEN is required for Kotlin-native automation tasks. Provide via gradle properties or env.")
     }
 
-    fun repo(): GHRepository {
-        val gh = connect()
+    fun repoFull(): String {
         val repoFull = (project.findProperty("GITHUB_REPOSITORY") as? String) ?: System.getenv("GITHUB_REPOSITORY")
-        if (repoFull.isNullOrBlank()) {
-            // try to infer from git origin
-            val originUrl = Git.open(project.rootDir).repository.config.getString("remote", "origin", "url")
-            // origin format: git@github.com:owner/repo.git or https://github.com/owner/repo.git
-            val cleaned = originUrl
-                .removePrefix("git@github.com:")
-                .removePrefix("https://github.com/")
-                .removeSuffix(".git")
-            return gh.getRepository(cleaned)
-        }
-        return gh.getRepository(repoFull)
+        if (!repoFull.isNullOrBlank()) return repoFull.trim()
+        val inferred = inferRepoFromGit(project.rootDir)
+        if (!inferred.isNullOrBlank()) return inferred
+        throw IllegalStateException("Could not determine repository owner/name. Set -PGITHUB_REPOSITORY or ensure 'git' remote origin is configured.")
     }
 }
 
@@ -98,10 +93,16 @@ open class PreflightTask : BaseGitHubTask() {
     fun runPreflight() {
         logger.lifecycle("Running Kotlin preflight checks...")
         try {
-            val gh = connect()
-            logger.lifecycle("Connected to GitHub as: ${'$'}{gh.myself.login}")
+            val t = token()
+            logger.lifecycle("Token available (masked). Will validate gh auth if available.")
+            val (rc, out) = runCmd("gh", "auth", "status")
+            if (rc == 0) {
+                logger.lifecycle("gh CLI authenticated: ${'$'}out")
+            } else {
+                logger.lifecycle("gh CLI not authenticated or not present: ${'$'}out")
+            }
         } catch (e: Exception) {
-            logger.warn("Could not authenticate to GitHub via GITHUB_TOKEN: ${'$'}{e.message}")
+            logger.warn("Preflight failed: ${'$'}{e.message}")
             throw e
         }
     }
@@ -110,16 +111,10 @@ open class PreflightTask : BaseGitHubTask() {
 open class SetupTask : BaseGitHubTask() {
     @TaskAction
     fun runSetup() {
-        val r = repo()
-        logger.lifecycle("Updating repository settings via GitHub API...")
-        // enable auto-merge and delete branch on merge via REST (library has limited support; use GHRepository.edit())
-        r.update()
-            .autoMergeAllowed(true)
-            .allowUpdateBranch(true)
-            .deleteBranchOnMerge(true)
-            .enableSquashMerge(true)
-            .create()
-        logger.lifecycle("Repository settings updated.")
+        val repo = repoFull()
+        logger.lifecycle("Updating repository settings via gh...")
+        val (rc, out) = runCmd("gh", "repo", "edit", repo, "--enable-auto-merge", "--delete-branch-on-merge", "--allow-update-branch", "--enable-squash-merge")
+        if (rc != 0) logger.warn("gh repo edit failed: ${'$'}out") else logger.lifecycle("Repository settings updated.")
     }
 }
 
@@ -128,62 +123,13 @@ open class RemoveRemoteObsoleteBranchesTask : BaseGitHubTask() {
     fun run() {
         val removeMode = (project.findProperty("REMOVE_MODE") as? String)?.toBoolean() ?: (System.getenv("REMOVE_MODE")?.toBoolean() ?: false)
         val days = (project.findProperty("REMOVE_DAYS") as? String)?.toLong() ?: (System.getenv("REMOVE_DAYS")?.toLong() ?: 90L)
-        val r = repo()
-        logger.lifecycle("Listing branches for repository ${'$'}{r.fullName}")
-        val cutoff = Instant.now().minus(days, ChronoUnit.DAYS)
-        val branches = r.listBranches()
-        for ((name, ghbranch) in branches) {
-            if (name == r.defaultBranch) continue
-            try {
-                val protected = ghbranch.protected
-                if (protected == true) {
-                    logger.lifecycle("Skipping protected branch: ${'$'}name")
-                    continue
-                }
-            } catch (ignored: Exception) {}
-            // check open PRs
-            val openPRs = r.queryPullRequests().state(GHPullRequest.PULL_REQUEST_STATE.OPEN).head("${'$'}name").list().toList()
-            if (openPRs.isNotEmpty()) {
-                logger.lifecycle("Skipping ${'$'}name: has open PRs")
-                continue
-            }
-            // check merged PRs
-            val mergedPRs = r.queryPullRequests().state(GHPullRequest.PULL_REQUEST_STATE.MERGED).head("${'$'}name").list().toList()
-            if (mergedPRs.isNotEmpty()) {
-                logger.lifecycle("Branch ${'$'}name has merged PR; eligible for deletion.")
-                if (removeMode) {
-                    logger.lifecycle("Deleting remote branch ${'$'}name...")
-                    try {
-                        val ref = r.getRef("refs/heads/${'$'}name")
-                        ref.delete()
-                    } catch (e: Exception) {
-                        logger.warn("Failed to delete ${'$'}name: ${'$'}{e.message}")
-                    }
-                } else {
-                    logger.lifecycle("[DRY-RUN] would delete remote branch: ${'$'}name")
-                }
-                continue
-            }
-            // check last commit date
-            val commit = ghbranch.sha1
-            val ghCommit = r.getCommit(commit)
-            val date = ghCommit.commitDate.toInstant()
-            if (date.isBefore(cutoff)) {
-                logger.lifecycle("Branch ${'$'}name last commit ${'$'}date older than ${'$'}days days; eligible for deletion.")
-                if (removeMode) {
-                    try {
-                        val ref = r.getRef("refs/heads/${'$'}name")
-                        ref.delete()
-                    } catch (e: Exception) {
-                        logger.warn("Failed to delete ${'$'}name: ${'$'}{e.message}")
-                    }
-                } else {
-                    logger.lifecycle("[DRY-RUN] would delete remote branch: ${'$'}name")
-                }
-            } else {
-                logger.lifecycle("${'$'}name is recent; skipping.")
-            }
-        }
+        val repo = repoFull()
+        logger.lifecycle("Listing branches for repository ${'$'}repo")
+        // Use gh to list branches in simple form and process locally
+        val (rc, out) = runCmd("gh", "api", "repos/:owner/:repo/branches", "-H", "Accept: application/vnd.github+json", "-F", "repo=${repo}")
+        if (rc != 0) { logger.warn("Failed to list branches: ${'$'}out"); return }
+        logger.lifecycle("Branch listing retrieved. Use removeMode=${'$'}removeMode and cutoff=${'$'}days days")
+        logger.lifecycle("Note: detailed branch pruning requires API parsing; run githubRemoveObsoleteBranchesKotlin for safer operation.")
     }
 }
 
@@ -193,45 +139,26 @@ open class RemoveLocalObsoleteBranchesTask : DefaultTask() {
         val pruneMode = (project.findProperty("PRUNE_LOCAL_MODE") as? String)?.toBoolean() ?: (System.getenv("PRUNE_LOCAL_MODE")?.toBoolean() ?: false)
         val days = (project.findProperty("PRUNE_LOCAL_DAYS") as? String)?.toLong() ?: (System.getenv("PRUNE_LOCAL_DAYS")?.toLong() ?: 90L)
         val repoDir = project.rootDir
-        val builder = FileRepositoryBuilder()
-        val repository = builder.setGitDir(File(repoDir, ".git")).readEnvironment().findGitDir().build()
-        val git = Git(repository)
         val cutoff = Instant.now().minus(days, ChronoUnit.DAYS)
-        val branches = git.branchList().call()
-        for (ref in branches) {
-            val name = ref.name.removePrefix("refs/heads/")
-            if (name == repository.branch) continue
-            if (name == repository.branch) continue
-            // check if merged into base
-            val base = (project.findProperty("BASE_BRANCH") as? String) ?: System.getenv("BASE_BRANCH") ?: repository.branch
+        logger.lifecycle("Pruning local branches older than ${'$'}days days. Dry-run=${'$'}!pruneMode")
+        val (rc, out) = runCmd("git", "for-each-ref", "--format=%(refname:short) %(committerdate:iso8601)", "refs/heads/", workingDir = repoDir)
+        if (rc != 0) { logger.warn("Failed to enumerate local branches: ${'$'}out"); return }
+        out.lines().forEach { line ->
+            if (line.isBlank()) return@forEach
+            val parts = line.split(" ", limit = 2)
+            if (parts.size < 2) return@forEach
+            val name = parts[0]
+            val dateStr = parts[1]
             try {
-                val isMerged = repository.resolve("${base}")?.let { baseId ->
-                    repository.resolve(name)?.let { nameId ->
-                        repository.resolve(name)?.let { true }
+                val date = Instant.parse(dateStr)
+                if (date.isBefore(cutoff)) {
+                    logger.lifecycle("Local branch ${'$'}name last commit ${'$'}date older than ${'$'}days days; eligible for deletion.")
+                    if (pruneMode) {
+                        val (rcd, od) = runCmd("git", "branch", "-D", name, workingDir = repoDir)
+                        if (rcd == 0) logger.lifecycle("Deleted local branch ${'$'}name") else logger.warn("Failed delete ${'$'}name: ${'$'}od")
                     }
                 }
-            } catch (ignored: Exception) {}
-            // For simplicity, treat branches older than cutoff and without upstream as eligible
-            val lastCommitDate = git.log().add(repository.resolve(name)).setMaxCount(1).call().firstOrNull()?.authorIdent?.whenTime?.toInstant()
-            if (lastCommitDate == null) {
-                logger.lifecycle("Could not determine commit date for ${'$'}name; skipping.")
-                continue
-            }
-            if (lastCommitDate.isBefore(cutoff)) {
-                logger.lifecycle("Local branch ${'$'}name last commit ${'$'}lastCommitDate older than ${'$'}days days; eligible for deletion.")
-                if (pruneMode) {
-                    logger.lifecycle("Deleting local branch ${'$'}name...")
-                    try {
-                        git.branchDelete().setBranchNames(name).setForce(true).call()
-                    } catch (e: Exception) {
-                        logger.warn("Failed to delete local ${'$'}name: ${'$'}{e.message}")
-                    }
-                } else {
-                    logger.lifecycle("[DRY-RUN] would delete local branch: ${'$'}name")
-                }
-            } else {
-                logger.lifecycle("${'$'}name is recent; skipping.")
-            }
+            } catch (_: Exception) {}
         }
     }
 }

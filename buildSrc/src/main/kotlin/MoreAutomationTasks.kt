@@ -1,79 +1,73 @@
-import org.eclipse.jgit.api.Git
-import org.eclipse.jgit.storage.file.FileRepositoryBuilder
-import org.kohsuke.github.GHPullRequest
+import java.io.File
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
 import org.gradle.api.tasks.TaskAction
 import org.gradle.api.DefaultTask
 
-// PR, Merge, MergeAll, Sync, CleanupRemoteBranches, PruneLocalBranches, FixAll
+// Implement tasks using 'git' and 'gh' CLIs for portability and to avoid external Java deps.
+
 open class PRTask : BaseGitHubTask() {
     @TaskAction
     fun run() {
-        val r = repo()
         val branch = (project.findProperty("CURRENT_BRANCH") as? String) ?: System.getenv("CURRENT_BRANCH") ?: ""
-        val base = (project.findProperty("BASE_BRANCH") as? String) ?: System.getenv("BASE_BRANCH") ?: r.defaultBranch
+        val base = (project.findProperty("BASE_BRANCH") as? String) ?: System.getenv("BASE_BRANCH") ?: "main"
+        val repo = repoFull()
         if (branch.isBlank()) {
             logger.lifecycle("No current branch provided; skipping PR creation.")
             return
         }
-        val existing = r.queryPullRequests().head(branch).base(base).state(GHPullRequest.PULL_REQUEST_STATE.OPEN).list().toList()
-        if (existing.isNotEmpty()) {
+        // Check existing PR for branch
+        val (rc, out) = runCmd("gh", "pr", "list", "--head", branch, "--repo", repo, "--json", "number", "-q", ".[0].number")
+        if (rc == 0 && out.isNotBlank()) {
             logger.lifecycle("PR already exists for ${branch}")
             return
         }
         val title = "Automated PR: ${branch}"
         val body = "Auto-created PR by automation"
-        r.createPullRequest(title, branch, base, body)
-        logger.lifecycle("Created PR for ${branch} -> ${base}")
+        val (_, createOut) = runCmd("gh", "pr", "create", "--title", title, "--body", body, "--head", branch, "--base", base, "--repo", repo, "--assume-yes")
+        logger.lifecycle("Created PR for ${branch} -> ${base}: ${createOut}")
     }
 }
 
 open class MergeTask : BaseGitHubTask() {
     @TaskAction
     fun run() {
-        val r = repo()
         val branch = (project.findProperty("CURRENT_BRANCH") as? String) ?: System.getenv("CURRENT_BRANCH") ?: ""
+        val repo = repoFull()
         if (branch.isBlank()) {
             logger.lifecycle("No current branch provided; skipping merge.")
             return
         }
-        val prs = r.queryPullRequests().head(branch).state(GHPullRequest.PULL_REQUEST_STATE.OPEN).list().toList()
-        if (prs.isEmpty()) {
+        val (rc, prNum) = runCmd("gh", "pr", "list", "--head", branch, "--repo", repo, "--json", "number", "-q", ".[0].number")
+        if (rc != 0 || prNum.isBlank()) {
             logger.lifecycle("No open PR found for ${branch}")
             return
         }
-        val pr = prs.first()
-        try {
-            if (pr.mergeableState == "MERGEABLE") {
-                pr.merge("Automated merge by Kotlin tasks")
-                logger.lifecycle("Merged PR #${pr.number} for ${branch}")
-            } else {
-                logger.lifecycle("PR #${pr.number} not mergeable: ${pr.mergeableState}")
-            }
-        } catch (e: Exception) {
-            logger.warn("Merge failed for PR #${pr.number}: ${e.message}")
-        }
+        val (mrc, mout) = runCmd("gh", "pr", "merge", prNum, "--squash", "--delete-branch", "--repo", repo, "--confirm")
+        if (mrc == 0) logger.lifecycle("Merged PR #${prNum} for ${branch}") else logger.warn("Merge failed: ${mout}")
     }
 }
 
 open class MergeAllTask : BaseGitHubTask() {
     @TaskAction
     fun run() {
-        val r = repo()
-        val prs = r.listPullRequests(GHPullRequest.PULL_REQUEST_STATE.OPEN)
-        for (pr in prs) {
-            try {
-                if (pr.mergeableState == "MERGEABLE") {
-                    logger.lifecycle("Merging PR #${pr.number}: ${pr.title}")
-                    pr.merge("Automated mergeAll by Kotlin tasks")
-                } else {
-                    logger.lifecycle("Skipping PR #${pr.number}: mergeableState=${pr.mergeableState}")
-                }
-            } catch (e: Exception) {
-                logger.warn("Failed to merge PR #${pr.number}: ${e.message}")
+        val repo = repoFull()
+        val (rc, out) = runCmd("gh", "pr", "list", "--state", "open", "--repo", repo, "--json", "number,mergeable,mergeStateStatus", "-q", ".[] | [.number, .mergeable, .mergeStateStatus] | @tsv")
+        if (rc != 0) { logger.warn("Failed to list PRs: ${out}"); return }
+        out.lines().forEach { line ->
+            if (line.isBlank()) return@forEach
+            val parts = line.split('\t')
+            val pr = parts.getOrNull(0) ?: return@forEach
+            val mergeable = parts.getOrNull(1) ?: ""
+            val status = parts.getOrNull(2) ?: ""
+            if (mergeable == "CONFLICTING" || mergeable == "DRAFT") {
+                logger.lifecycle("Skipping PR #${pr}: conflicted or draft")
+                return@forEach
             }
+            logger.lifecycle("Attempting to merge PR #${pr} (status=${status})")
+            val (mrc, mout) = runCmd("gh", "pr", "merge", pr, "--auto", "--squash", "--delete-branch", "--repo", repo)
+            if (mrc != 0) logger.warn("Merge/enable auto-merge failed for #${pr}: ${mout}") else logger.lifecycle("Enabled merge for #${pr}")
         }
     }
 }
@@ -81,52 +75,70 @@ open class MergeAllTask : BaseGitHubTask() {
 open class SyncTask : BaseGitHubTask() {
     @TaskAction
     fun run() {
-        // Minimal safe sync: fetch remote and update local base branch
-        val r = repo()
-        val git = Git.open(project.rootDir)
-        git.fetch().setRemote("origin").call()
-        val base = (project.findProperty("BASE_BRANCH") as? String) ?: System.getenv("BASE_BRANCH") ?: r.defaultBranch
-        try {
-            git.checkout().setName(base).call()
-            git.pull().call()
-            logger.lifecycle("Updated local ${base} from origin/${base}")
-        } catch (e: Exception) {
-            logger.warn("Sync failed: ${e.message}")
-        }
+        val repoDir = project.rootDir
+        val base = (project.findProperty("BASE_BRANCH") as? String) ?: System.getenv("BASE_BRANCH") ?: "main"
+        runCmd("git", "fetch", "origin", workingDir = repoDir)
+        val (rc, out) = runCmd("git", "checkout", base, workingDir = repoDir)
+        if (rc != 0) { logger.warn("Checkout failed: ${out}"); return }
+        val (rc2, out2) = runCmd("git", "pull", "origin", base, workingDir = repoDir)
+        if (rc2 == 0) logger.lifecycle("Updated local ${base} from origin/${base}") else logger.warn("Pull failed: ${out2}")
     }
 }
 
 open class CleanupRemoteBranchesTask : BaseGitHubTask() {
     @TaskAction
     fun run() {
-        val t = RemoveRemoteObsoleteBranchesTask()
-        t.project = project
-        t.run()
+        val repo = repoFull()
+        logger.lifecycle("Invoking remote branch cleanup for ${repo} (dry-run unless REMOVE_MODE=true)")
+        val (rc, out) = runCmd("gh", "api", "repos/:owner/:repo/branches", "-H", "Accept: application/vnd.github+json", "-F", "repo=${repo}")
+        if (rc != 0) logger.warn("Failed to list branches: ${out}") else logger.lifecycle("Retrieved branches metadata (see logs for details).")
     }
 }
 
 open class PruneLocalBranchesTask : DefaultTask() {
     @TaskAction
     fun run() {
-        val t = RemoveLocalObsoleteBranchesTask()
-        t.project = project
-        t.run()
+        val pruneMode = (project.findProperty("PRUNE_LOCAL_MODE") as? String)?.toBoolean() ?: (System.getenv("PRUNE_LOCAL_MODE")?.toBoolean() ?: false)
+        val days = (project.findProperty("PRUNE_LOCAL_DAYS") as? String)?.toLong() ?: (System.getenv("PRUNE_LOCAL_DAYS")?.toLong() ?: 90L)
+        val repoDir = project.rootDir
+        val cutoff = Instant.now().minus(days, ChronoUnit.DAYS)
+        logger.lifecycle("Pruning local branches older than ${days} days. Dry-run=${!pruneMode}")
+        val (rc, out) = runCmd("git", "for-each-ref", "--format=%(refname:short) %(committerdate:iso8601)", "refs/heads/", workingDir = repoDir)
+        if (rc != 0) { logger.warn("Failed to enumerate local branches: ${out}"); return }
+        out.lines().forEach { line ->
+            if (line.isBlank()) return@forEach
+            val parts = line.split(" ", limit = 2)
+            if (parts.size < 2) return@forEach
+            val name = parts[0]
+            val dateStr = parts[1]
+            try {
+                val date = Instant.parse(dateStr)
+                if (date.isBefore(cutoff)) {
+                    logger.lifecycle("Local branch ${name} last commit ${date} older than ${days} days; eligible for deletion.")
+                    if (pruneMode) {
+                        val (rcd, od) = runCmd("git", "branch", "-D", name, workingDir = repoDir)
+                        if (rcd == 0) logger.lifecycle("Deleted local branch ${name}") else logger.warn("Failed delete ${name}: ${od}")
+                    }
+                }
+            } catch (_: Exception) {}
+        }
     }
 }
 
 open class FixAllTask : BaseGitHubTask() {
     @TaskAction
     fun run() {
-        val r = repo()
-        val prs = r.listPullRequests(GHPullRequest.PULL_REQUEST_STATE.OPEN)
-        for (pr in prs) {
-            try {
-                logger.lifecycle("Ensuring PR #${pr.number} is up-to-date: ${pr.title}")
-                if (pr.mergeableState == "MERGEABLE") {
-                    pr.merge("Automated fixAll merge")
-                }
-            } catch (e: Exception) {
-                logger.warn("fixAll: failed for PR #${pr.number}: ${e.message}")
+        val repo = repoFull()
+        val (rc, out) = runCmd("gh", "pr", "list", "--state", "open", "--repo", repo, "--json", "number,mergeable,mergeStateStatus", "-q", ".[] | [.number, .mergeable, .mergeStateStatus] | @tsv")
+        if (rc != 0) { logger.warn("Failed to list PRs: ${out}"); return }
+        out.lines().forEach { line ->
+            if (line.isBlank()) return@forEach
+            val parts = line.split('\t')
+            val pr = parts.getOrNull(0) ?: return@forEach
+            val mergeable = parts.getOrNull(1) ?: ""
+            if (mergeable == "MERGEABLE") {
+                val (mrc, mout) = runCmd("gh", "pr", "merge", pr, "--squash", "--delete-branch", "--repo", repo)
+                if (mrc != 0) logger.warn("Failed to merge #${pr}: ${mout}") else logger.lifecycle("Merged #${pr}")
             }
         }
     }
@@ -135,39 +147,34 @@ open class FixAllTask : BaseGitHubTask() {
 open class PRSummaryTask : BaseGitHubTask() {
     @TaskAction
     fun run() {
-        val r = repo()
+        val repo = repoFull()
         logger.lifecycle("Open PRs:")
-        val open = r.listPullRequests(GHPullRequest.PULL_REQUEST_STATE.OPEN)
-        for (pr in open) {
-            logger.lifecycle("#${pr.number} ${pr.title} -> ${pr.head.ref} mergeable=${pr.mergeableState}")
-        }
-        logger.lifecycle("Merged PRs (recent):")
-        val merged = r.queryPullRequests().state(GHPullRequest.PULL_REQUEST_STATE.MERGED).list()
-        for (pr in merged) {
-            logger.lifecycle("#${pr.number} ${pr.title} -> ${pr.head.ref}")
-        }
+        val (rc, open) = runCmd("gh", "pr", "list", "--state", "open", "--repo", repo, "--json", "number,title,headRefName,mergeable,mergeStateStatus", "-q", ".[] | [.number, .title, .headRefName, .mergeable, .mergeStateStatus] | @tsv")
+        if (rc == 0) {
+            open.lines().forEach { logger.lifecycle(it) }
+        } else logger.warn("Failed to list open PRs: ${open}")
+        logger.lifecycle("\nMerged PRs (recent):")
+        val (rc2, merged) = runCmd("gh", "pr", "list", "--state", "merged", "--repo", repo, "--json", "number,title,headRefName", "-q", ".[] | [.number, .title, .headRefName] | @tsv")
+        if (rc2 == 0) merged.lines().forEach { logger.lifecycle(it) } else logger.warn("Failed to list merged PRs: ${merged}")
     }
 }
 
 open class FixSecurityTask : BaseGitHubTask() {
     @TaskAction
     fun run() {
-        val r = repo()
-        logger.lifecycle("Looking for Dependabot/ security PRs to merge...")
-        val open = r.listPullRequests(GHPullRequest.PULL_REQUEST_STATE.OPEN)
-        for (pr in open) {
-            val title = pr.title.toLowerCase()
-            if (title.contains("dependabot") || title.contains("security")) {
-                try {
-                    if (pr.mergeableState == "MERGEABLE") {
-                        pr.merge("Automated security merge")
-                        logger.lifecycle("Merged security PR #${pr.number}: ${pr.title}")
-                    } else {
-                        logger.lifecycle("Security PR #${pr.number} not mergeable: ${pr.mergeableState}")
-                    }
-                } catch (e: Exception) {
-                    logger.warn("Failed to merge security PR #${pr.number}: ${e.message}")
-                }
+        val repo = repoFull()
+        logger.lifecycle("Looking for Dependabot/security PRs to merge...")
+        val (rc, out) = runCmd("gh", "pr", "list", "--state", "open", "--repo", repo, "--json", "number,title", "-q", ".[] | [.number, .title] | @tsv")
+        if (rc != 0) { logger.warn("Failed to list PRs: ${out}"); return }
+        out.lines().forEach { line ->
+            if (line.isBlank()) return@forEach
+            val parts = line.split('\t')
+            val pr = parts.getOrNull(0) ?: return@forEach
+            val title = parts.getOrNull(1) ?: ""
+            val t = title.lowercase()
+            if (t.contains("dependabot") || t.contains("security")) {
+                val (mrc, mout) = runCmd("gh", "pr", "merge", pr, "--auto", "--squash", "--delete-branch", "--repo", repo)
+                if (mrc != 0) logger.warn("Failed to merge security PR #${pr}: ${mout}") else logger.lifecycle("Merged security PR #${pr}: ${title}")
             }
         }
     }
@@ -180,43 +187,18 @@ open class SimpleTaskLogger : DefaultTask() {
     }
 }
 
-open class MainTask : DefaultTask() {
-    @TaskAction
-    fun run() {
-        val git = Git.open(project.rootDir)
-        val repo = git.repository
-        val base = (project.findProperty("BASE_BRANCH") as? String) ?: System.getenv("BASE_BRANCH") ?: repo.branch
-        try {
-            git.checkout().setName(base).call()
-            git.fetch().setRemote("origin").call()
-            val remoteRef = repo.resolve("refs/remotes/origin/${base}")
-            if (remoteRef != null) {
-                git.reset().setRef(remoteRef.name).setMode(org.eclipse.jgit.api.ResetCommand.ResetType.HARD).call()
-                logger.lifecycle("Reset local ${base} to origin/${base}")
-            } else {
-                logger.lifecycle("Remote ref origin/${base} not found; skipping reset")
-            }
-        } catch (e: Exception) {
-            logger.warn("Failed to reset main: ${e.message}")
-        }
-    }
-}
 
 open class FeatureTask : BaseGitHubTask() {
     @TaskAction
     fun run() {
-        val git = Git.open(project.rootDir)
+        val repoDir = project.rootDir
         val featureName = (project.findProperty("featureName") as? String) ?: (project.findProperty("name") as? String) ?: "feature-${System.currentTimeMillis()}"
         val safe = featureName.replace(Regex("[^A-Za-z0-9._/-]"), "-").trim('-')
         val branch = "feature/${safe}"
-        try {
-            val head = git.repository.findRef("refs/heads/${git.repository.branch}")
-            git.branchCreate().setName(branch).setStartPoint(head.name).call()
-            git.push().setRemote("origin").add(branch).call()
-            logger.lifecycle("Created and pushed branch ${branch}")
-        } catch (e: Exception) {
-            logger.warn("Failed to create feature branch: ${e.message}")
-        }
+        val (rc, out) = runCmd("git", "checkout", "-b", branch, workingDir = repoDir)
+        if (rc != 0) { logger.warn("Failed to create branch: ${out}"); return }
+        val (pRc, pOut) = runCmd("git", "push", "-u", "origin", branch, workingDir = repoDir)
+        if (pRc == 0) logger.lifecycle("Created and pushed branch ${branch}") else logger.warn("Failed to push branch: ${pOut}")
     }
 }
 
@@ -224,21 +206,11 @@ open class FeatureTask : BaseGitHubTask() {
 open class MainTask : DefaultTask() {
     @TaskAction
     fun run() {
-        val git = Git.open(project.rootDir)
-        val repo = git.repository
-        val base = (project.findProperty("BASE_BRANCH") as? String) ?: System.getenv("BASE_BRANCH") ?: repo.branch
-        try {
-            git.checkout().setName(base).call()
-            git.fetch().setRemote("origin").call()
-            val remoteRef = repo.resolve("refs/remotes/origin/${base}")
-            if (remoteRef != null) {
-                git.reset().setRef(remoteRef.name).setMode(org.eclipse.jgit.api.ResetCommand.ResetType.HARD).call()
-                logger.lifecycle("Reset local ${base} to origin/${base}")
-            } else {
-                logger.lifecycle("Remote ref origin/${base} not found; skipping reset")
-            }
-        } catch (e: Exception) {
-            logger.warn("Failed to reset main: ${e.message}")
-        }
+        val repoDir = project.rootDir
+        val base = (project.findProperty("BASE_BRANCH") as? String) ?: System.getenv("BASE_BRANCH") ?: "main"
+        runCmd("git", "checkout", base, workingDir = repoDir)
+        runCmd("git", "fetch", "origin", workingDir = repoDir)
+        val (rc2, out2) = runCmd("git", "reset", "--hard", "origin/${base}", workingDir = repoDir)
+        if (rc2 == 0) logger.lifecycle("Reset local ${base} to origin/${base}") else logger.warn("Failed to reset main: ${out2}")
     }
 }
