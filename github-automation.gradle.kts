@@ -15,6 +15,29 @@ val gitHubCommonScript = """
      exit 1
     }
 
+    # Helper: confirm action via env var or interactive prompt.
+    # Usage: confirm_or_abort VAR_NAME "message"
+    confirm_or_abort() {
+      VAR_NAME="$1"; shift
+      MSG="$*"
+      VAL="${'$'}{!VAR_NAME:-}"
+      VAL_LOWER="${'$'}(printf '%s' "${'$'}VAL" | tr '[:upper:]' '[:lower:]')"
+      if [ "${'$'}VAL_LOWER" = "true" ]; then
+        return 0
+      fi
+      # If running interactively, ask the user; otherwise require explicit env flag
+      if [ -t 1 ]; then
+        read -r -p "${'$'}MSG [y/N]: " ans
+        case "${'$'}ans" in
+          [yY]) return 0 ;;
+          *) echo "Aborted by user."; exit 1 ;;
+        esac
+      else
+        echo "${'$'}MSG - set ${'$'}${VAR_NAME}=true to confirm (non-interactive)" >&2
+        exit 1
+      fi
+    }
+
     REMOTE_NAME="${'$'}(git remote | head -n 1 || true)"
     if [ -z "${'$'}REMOTE_NAME" ]; then
      echo "No git remote configured; operating in local-only mode."
@@ -71,7 +94,7 @@ fun asGitHubScript(vararg parts: String): String = (listOf(gitHubCommonScript) +
 
 tasks.register("github") {
     group = "github"
-    description = "Runs the standard GitHub automation workflow: update latest main, sync current branch, merge clean PRs, and check status."
+    description = "Runs the creator workflow: sync latest main, update the current branch, merge clean PRs, and report state."
     dependsOn("githubSync", "githubMergeAll", "githubStatus")
 }
 
@@ -79,17 +102,17 @@ tasks.register<Exec>("githubStatus") {
     group = "github"
     description = "Displays the repo, current branch, default branch, and PR status when available."
     commandLine("bash", "-c", asGitHubScript(
-        """
-            echo "Repository: ${'$'}(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-            echo "Current branch: ${'$'}CURRENT_BRANCH"
-            echo "Default branch: ${'$'}BASE_BRANCH"
-            echo "------------------------------------------------------------"
-            if command -v gh >/dev/null 2>&1; then
-              gh pr status || gh repo view --json nameWithOwner
-            else
-              git status --short --branch
-            fi
-        """.trimIndent()
+       """
+           echo "Repository: ${'$'}(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+           echo "Current branch: ${'$'}CURRENT_BRANCH"
+           echo "Default branch: ${'$'}BASE_BRANCH"
+           echo "------------------------------------------------------------"
+           if command -v gh >/dev/null 2>&1; then
+             gh pr status || gh repo view --json nameWithOwner
+           else
+             git status --short --branch
+           fi
+       """.trimIndent()
     ))
 }
 
@@ -97,7 +120,7 @@ tasks.register<Exec>("githubStatus") {
 
 tasks.register<Exec>("githubSync") {
     group = "github"
-    description = "Updates local main to the latest remote state, syncs the current branch to it, and preserves local work before rebasing."
+    description = "Safely updates local main, preserves work, and rebases the current branch onto the latest base without discarding contributor updates."
     commandLine("bash", "-c", asGitHubScript(
        """
            git fetch --all --prune
@@ -109,28 +132,44 @@ tasks.register<Exec>("githubSync") {
            fi
 
            ORIG_BRANCH="${'$'}CURRENT_BRANCH"
-           if [ -n "${'$'}REMOTE_NAME" ] && git rev-parse --verify "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" >/dev/null 2>&1; then
-             if [ "${'$'}CURRENT_BRANCH" != "${'$'}BASE_BRANCH" ]; then
-               if git show-ref --verify --quiet "refs/heads/${'$'}BASE_BRANCH"; then
-                 echo "🔄 Updating local ${'$'}BASE_BRANCH to the latest remote state..."
-                 git checkout "${'$'}BASE_BRANCH" >/dev/null 2>&1 || git switch "${'$'}BASE_BRANCH"
-                 git reset --hard "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" 2>/dev/null || git reset --hard "${'$'}BASE_BRANCH"
-               else
-                 echo "📥 Creating local ${'$'}BASE_BRANCH from remote..."
-                 git checkout -B "${'$'}BASE_BRANCH" "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH"
-               fi
-             else
-               echo "🔄 Updating local ${'$'}BASE_BRANCH to the latest remote state..."
-               git reset --hard "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" 2>/dev/null || git reset --hard "${'$'}BASE_BRANCH"
-             fi
+           BASE_REF="${'$'}REMOTE_NAME/${'$'}BASE_BRANCH"
 
-             if [ "${'$'}ORIG_BRANCH" != "${'$'}BASE_BRANCH" ]; then
-               echo "↩️  Returning to ${'$'}ORIG_BRANCH and rebasing onto ${'$'}BASE_BRANCH..."
+           if [ -n "${'$'}REMOTE_NAME" ] && git rev-parse --verify "${'$'}BASE_REF" >/dev/null 2>&1; then
+             if [ "${'$'}CURRENT_BRANCH" != "${'$'}BASE_BRANCH" ]; then
+               echo "🔄 Updating local ${'$'}BASE_BRANCH from ${'$'}BASE_REF..."
+               git checkout "${'$'}BASE_BRANCH" >/dev/null 2>&1 || git switch "${'$'}BASE_BRANCH"
+               git fetch "${'$'}REMOTE_NAME" "${'$'}BASE_BRANCH"
+
+               uncommitted="${'$'}(git status --porcelain)"
+               counts="${'$'}(git rev-list --left-right --count "${'$'}BASE_BRANCH"..."${'$'}BASE_REF" 2>/dev/null || true)"
+               behind="${'$'}(echo ${'$'}counts | awk '{print $1}')"
+               ahead="${'$'}(echo ${'$'}counts | awk '{print $2}')"
+               if [ -n "${'$'}uncommitted" ] || { [ -n "${'$'}ahead" ] && [ "${'$'}ahead" -ne 0 ]; }; then
+                 echo "⚠️ Preparing to reset local ${'$'}BASE_BRANCH to ${'$'}BASE_REF which may discard local changes or ${'$'}ahead local commit(s)."
+                 confirm_or_abort MAIN_RESET_CONFIRM "Reset local ${'$'}BASE_BRANCH to ${'$'}REMOTE_NAME/${'$'}BASE_BRANCH?"
+               fi
+
+               git reset --hard "${'$'}BASE_REF"
+               echo "↩️  Returning to ${'$'}ORIG_BRANCH..."
                git checkout "${'$'}ORIG_BRANCH" >/dev/null 2>&1 || git switch "${'$'}ORIG_BRANCH"
+             else
+               echo "🔄 Updating local ${'$'}BASE_BRANCH from ${'$'}BASE_REF..."
+               git fetch "${'$'}REMOTE_NAME" "${'$'}BASE_BRANCH"
+
+               uncommitted="${'$'}(git status --porcelain)"
+               if [ -n "${'$'}uncommitted" ]; then
+                 echo "⚠️ Local uncommitted changes present on ${'$'}BASE_BRANCH."
+                 confirm_or_abort MAIN_RESET_CONFIRM "This will discard local changes on ${'$'}BASE_BRANCH. Confirm reset to ${'$'}REMOTE_NAME/${'$'}BASE_BRANCH?"
+               fi
+
+               git reset --hard "${'$'}BASE_REF"
              fi
+           else
+             echo "⚠️  Remote base branch unavailable; using local ${'$'}BASE_BRANCH as the current source of truth."
            fi
 
            if [ "${'$'}CURRENT_BRANCH" = "${'$'}BASE_BRANCH" ]; then
+             echo "✅ Local base branch is up to date."
              exit 0
            fi
 
@@ -143,7 +182,21 @@ tasks.register<Exec>("githubSync") {
            fi
 
            if [ -n "${'$'}REMOTE_NAME" ]; then
-             git push -u "${'$'}REMOTE_NAME" HEAD || git push "${'$'}REMOTE_NAME" HEAD --force-with-lease
+             echo "🚀 Preparing to push ${'$'}CURRENT_BRANCH (safe push)..."
+             REMOTE_REF="${'$'}REMOTE_NAME/${'$'}CURRENT_BRANCH"
+             if git rev-parse --verify "${'$'}REMOTE_REF" >/dev/null 2>&1; then
+               remote_commit="${'$'}(git rev-parse "${'$'}REMOTE_REF")"
+               local_commit="${'$'}(git rev-parse HEAD)"
+               if [ "${'$'}remote_commit" != "${'$'}local_commit" ]; then
+                 echo "⚠️ Remote branch ${'$'}REMOTE_REF differs from local HEAD."
+                 confirm_or_abort FORCE_PUSH_CONFIRM "Remote branch ${'$'}REMOTE_REF will be updated with push --force-with-lease. Confirm?"
+                 git push -u "${'$'}REMOTE_NAME" HEAD --force-with-lease
+               else
+                 git push -u "${'$'}REMOTE_NAME" HEAD
+               fi
+             else
+               git push -u "${'$'}REMOTE_NAME" HEAD
+             fi
            fi
        """.trimIndent()
     ))
@@ -202,9 +255,31 @@ tasks.register<Exec>("githubMain") {
            if [ -n "${'$'}REMOTE_NAME" ] && git rev-parse --verify "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" >/dev/null 2>&1; then
              git switch "${'$'}BASE_BRANCH" 2>/dev/null || git checkout "${'$'}BASE_BRANCH"
              git fetch "${'$'}REMOTE_NAME" "${'$'}BASE_BRANCH"
+
+             uncommitted="${'$'}(git status --porcelain)"
+             if [ -n "${'$'}uncommitted" ]; then
+               echo "⚠️ Local uncommitted changes present on ${'$'}BASE_BRANCH."
+               confirm_or_abort MAIN_RESET_CONFIRM "This will discard local changes on ${'$'}BASE_BRANCH. Confirm reset to ${'$'}REMOTE_NAME/${'$'}BASE_BRANCH?"
+             fi
+
+             if git rev-parse --verify "${'$'}BASE_BRANCH" >/dev/null 2>&1 && git rev-parse --verify "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" >/dev/null 2>&1; then
+               counts="${'$'}(git rev-list --left-right --count "${'$'}BASE_BRANCH"..."${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" 2>/dev/null || true)"
+               behind="${'$'}(echo ${'$'}counts | awk '{print $1}')"
+               ahead="${'$'}(echo ${'$'}counts | awk '{print $2}')"
+               if [ -n "${'$'}ahead" ] && [ "${'$'}ahead" -ne 0 ]; then
+                 echo "⚠️ Local ${'$'}BASE_BRANCH is ahead by ${'$'}ahead commit(s) and will be lost."
+                 confirm_or_abort MAIN_RESET_CONFIRM "Reset will drop ${'$'}ahead local commit(s) on ${'$'}BASE_BRANCH. Confirm?"
+               fi
+             fi
+
              git reset --hard "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH"
            else
              git switch "${'$'}BASE_BRANCH" 2>/dev/null || git checkout "${'$'}BASE_BRANCH"
+             uncommitted="${'$'}(git status --porcelain)"
+             if [ -n "${'$'}uncommitted" ]; then
+               echo "⚠️ Local uncommitted changes present on ${'$'}BASE_BRANCH."
+               confirm_or_abort MAIN_RESET_CONFIRM "This will discard local changes on ${'$'}BASE_BRANCH. Confirm reset to local ${'$'}BASE_BRANCH?"
+             fi
              git reset --hard "${'$'}BASE_BRANCH"
            fi
        """.trimIndent()
@@ -275,16 +350,19 @@ tasks.register<Exec>("githubMergeAll") {
                  continue
                fi
 
-               if [ "${'$'}status" = "BEHIND" ] || [ "${'$'}status" = "UNKNOWN" ]; then
-                 echo "🔄 Updating branch with the default branch..."
-                 gh pr update-branch "${'$'}pr" || echo "❌ Update failed."
-               fi
+               echo "🔄 Ensuring branch is up-to-date with ${'$'}BASE_BRANCH..."
+               gh pr update-branch "${'$'}pr" || echo "❌ Update failed (will continue to next checks)."
 
-               if [ "${'$'}mergeable" = "MERGEABLE" ] || [ "${'$'}status" = "CLEAN" ] || [ "${'$'}status" = "HAS_HOOKS" ]; then
+               # Refresh PR metadata after attempted update
+               pr_info="${'$'}(gh pr view "${'$'}pr" --json mergeable,mergeStateStatus -q '. | [.mergeable, .mergeStateStatus] | @tsv' 2>/dev/null || true)"
+               mergeable2="${'$'}(echo "${'$'}pr_info" | cut -f1)"
+               status2="${'$'}(echo "${'$'}pr_info" | cut -f2)"
+
+               if [ "${'$'}mergeable2" = "MERGEABLE" ] || [ "${'$'}status2" = "CLEAN" ] || [ "${'$'}status2" = "HAS_HOOKS" ]; then
                  echo "🚀 Enabling auto-merge..."
                  gh pr merge "${'$'}pr" --auto --squash --delete-branch || echo "❌ Merge failed."
                else
-                 echo "⏭️  Skipping: PR is not yet mergeable."
+                 echo "⏭️  Skipping: PR is not yet mergeable after update."
                fi
              done
        """.trimIndent()
@@ -402,8 +480,10 @@ tasks.register<Exec>("githubFixAll") {
                echo "------------------------------------------------------------"
                echo "PR #${'$'}pr: ${'$'}title"
 
-               if [ "${'$'}status" = "BEHIND" ]; then
-                 echo "🔄 Branch is out-of-date. Updating with the default branch..."
+               if [ "${'$'}mergeable" = "CONFLICTING" ] || [ "${'$'}mergeable" = "DRAFT" ]; then
+                 echo "⚠️  Skipping update: PR is conflicted or draft."
+               else
+                 echo "🔄 Ensuring branch ${'$'}branch is up-to-date with ${'$'}BASE_BRANCH..."
                  gh pr update-branch "${'$'}pr" || echo "❌ Automatic update failed."
                fi
 
