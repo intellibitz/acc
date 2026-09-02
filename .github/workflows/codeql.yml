@@ -41,10 +41,7 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
-          build-mode: manual
-
-      - name: Build project
-        run: ./gradlew --no-daemon :common:compileKotlinJvm :gateway:compileKotlin :frontend:composeApp:compileKotlinJvm :frontend:desktop:compileKotlin --stacktrace
+          build-mode: autobuild
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v3
