@@ -1,53 +1,110 @@
 /**
  * GitHub Automation Tasks
- * 
- * This script provides a set of "Smart Sync" and repository management tasks
- * using the Git and GitHub (`gh`) CLIs. It can be applied to any Gradle project.
- * 
- * Usage:
- * apply(from = "github-automation.gradle.kts")
+ *
+ * This script provides a set of repository management tasks using Git and GitHub CLI.
+ * It is intentionally workflow-agnostic: it resolves the default branch from the repo,
+ * accepts both main/master/trunk/develop conventions, and handles detached HEADs,
+ * missing remotes, and local-only repositories gracefully.
  */
+
+val gitHubCommonScript = """
+    set -euo pipefail
+
+    git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
+     echo "Not inside a git repository." >&2
+     exit 1
+    }
+
+    REMOTE_NAME="${'$'}(git remote | head -n 1 || true)"
+    if [ -z "${'$'}REMOTE_NAME" ]; then
+     echo "No git remote configured; operating in local-only mode."
+    fi
+
+    BASE_BRANCH=""
+    if command -v gh >/dev/null 2>&1 && [ -n "${'$'}REMOTE_NAME" ]; then
+     BASE_BRANCH="${'$'}(gh repo view --json defaultBranchRef -q .defaultBranchRef.name 2>/dev/null || true)"
+    fi
+
+    if [ -z "${'$'}BASE_BRANCH" ]; then
+     for candidate in main master trunk develop; do
+       if [ -n "${'$'}REMOTE_NAME" ] && git show-ref --verify --quiet "refs/remotes/${'$'}REMOTE_NAME/${'$'}candidate"; then
+         BASE_BRANCH="${'$'}candidate"
+         break
+       fi
+       if git show-ref --verify --quiet "refs/heads/${'$'}candidate"; then
+         BASE_BRANCH="${'$'}candidate"
+         break
+       fi
+     done
+    fi
+
+    if [ -z "${'$'}BASE_BRANCH" ]; then
+     BASE_BRANCH="main"
+    fi
+
+    CURRENT_BRANCH="${'$'}(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo DETACHED)"
+    if [ "${'$'}CURRENT_BRANCH" = "HEAD" ] || [ "${'$'}CURRENT_BRANCH" = "DETACHED" ]; then
+     echo "Detached HEAD detected. Creating recovery branch from ${'$'}BASE_BRANCH..."
+     git switch -c "fix/${'$'}(date +%Y%m%d-%H%M%S)-detached" "${'$'}BASE_BRANCH" 2>/dev/null || \
+       git checkout -B "fix/${'$'}(date +%Y%m%d-%H%M%S)-detached" "${'$'}BASE_BRANCH"
+     CURRENT_BRANCH="${'$'}(git rev-parse --abbrev-ref HEAD)"
+    fi
+
+    export REMOTE_NAME BASE_BRANCH CURRENT_BRANCH
+""".trimIndent()
+
+fun sanitizedBranchName(raw: String): String = raw.trim()
+    .replace("[^A-Za-z0-9._/-]".toRegex(), "-")
+    .replace("/{2,}".toRegex(), "/")
+    .replace("^/|/$".toRegex(), "")
+    .ifEmpty { "feature" }
+
+val featureName = project.findProperty("featureName")?.toString()
+    ?: project.findProperty("name")?.toString()
+    ?: ""
+
+val featureSuffix = if (featureName.isNotBlank()) "-${sanitizedBranchName(featureName)}" else ""
+
+fun asGitHubScript(vararg parts: String): String = (listOf(gitHubCommonScript) + parts).joinToString("\n\n")
+
+// GitHub sync / branch hygiene tasks
 
 tasks.register<Exec>("githubSync") {
     group = "github"
-    description = "Smart sync: Keeps current branch updated with remote and origin/main."
-    val script = """
-        git fetch --all --prune
-        CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-        
-        # Capture local work
-        git add .
-        if ! git diff --cached --quiet; then
-          echo "📦 Capturing local work..."
-          git commit -m 'chore: automated sync to GitHub' || true
-        fi
+    description = "Smart sync: updates the current branch by rebasing onto the repository default branch and preserving local work."
+    commandLine("bash", "-c", asGitHubScript(
+       """
+           git fetch --all --prune
 
-        if [ "${'$'}CURRENT_BRANCH" = "main" ]; then
-          if ! git diff --quiet origin/main; then
-            SYNC_BRANCH="sync/${'$'}(date +%Y%m%d-%H%M%S)"
-            echo "⚠️  Dirty main branch detected. Moving work to ${'$'}SYNC_BRANCH..."
-            git checkout -b "${'$'}SYNC_BRANCH"
-            git push -u origin "${'$'}SYNC_BRANCH"
-            if command -v gh >/dev/null 2>&1; then
-              gh pr create --fill || echo "PR exists or no changes."
-            fi
-            git checkout main
-          fi
-          echo "🔄 Resetting main to origin/main..."
-          git reset --hard origin/main
-        else
-          echo "🌿 On feature branch: ${'$'}CURRENT_BRANCH"
-          echo "1. Pulling remote updates..."
-          git pull --rebase origin "${'$'}CURRENT_BRANCH" || { echo "❌ Pull failed."; exit 1; }
-          
-          echo "2. Rebasing on origin/main..."
-          git rebase origin/main || { echo "❌ Rebase on main failed. Resolve conflicts manually."; exit 1; }
-          
-          echo "3. Force-pushing clean state..."
-          git push origin HEAD --force-with-lease
-        fi
-    """.trimIndent()
-    commandLine("bash", "-c", script)
+           git add -A
+           if ! git diff --cached --quiet; then
+             echo "📦 Capturing local work..."
+             git commit -m "chore: automated sync to GitHub" || true
+           fi
+
+           if [ "${'$'}CURRENT_BRANCH" = "${'$'}BASE_BRANCH" ]; then
+             if [ -n "${'$'}REMOTE_NAME" ]; then
+               git fetch "${'$'}REMOTE_NAME" "${'$'}BASE_BRANCH" || true
+               git reset --hard "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" 2>/dev/null || git reset --hard "${'$'}BASE_BRANCH"
+             else
+               git reset --hard "${'$'}BASE_BRANCH"
+             fi
+             exit 0
+           fi
+
+           if [ -n "${'$'}REMOTE_NAME" ] && git rev-parse --verify "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" >/dev/null 2>&1; then
+             echo "🌿 Rebasing ${'$'}CURRENT_BRANCH onto ${'$'}REMOTE_NAME/${'$'}BASE_BRANCH..."
+             git rebase "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" || { echo "❌ Rebase onto ${'$'}BASE_BRANCH failed. Resolve conflicts manually." >&2; exit 1; }
+           elif git show-ref --verify --quiet "refs/heads/${'$'}BASE_BRANCH"; then
+             echo "🌿 Rebasing ${'$'}CURRENT_BRANCH onto local ${'$'}BASE_BRANCH..."
+             git rebase "${'$'}BASE_BRANCH" || { echo "❌ Rebase onto ${'$'}BASE_BRANCH failed. Resolve conflicts manually." >&2; exit 1; }
+           fi
+
+           if [ -n "${'$'}REMOTE_NAME" ]; then
+             git push -u "${'$'}REMOTE_NAME" HEAD || git push "${'$'}REMOTE_NAME" HEAD --force-with-lease
+           fi
+       """.trimIndent()
+    ))
 }
 
 tasks.register<Exec>("githubOpen") {
@@ -58,136 +115,201 @@ tasks.register<Exec>("githubOpen") {
 
 tasks.register<Exec>("githubFeature") {
     group = "github"
-    description = "Syncs work, then creates a new feature branch and ensures a PR is open."
+    description = "Creates a new feature branch from the default branch and opens a PR if possible."
     dependsOn("githubSync")
-    val suffix = if (project.hasProperty("name")) "-${project.property("name")}" else ""
-    val script = """
-        BRANCH_NAME="feature/${'$'}(date +%Y%m%d-%H%M%S)$suffix"
-        git checkout -b "${'$'}BRANCH_NAME"
-        git push -u origin "${'$'}BRANCH_NAME"
-        gh pr create --fill || echo "PR already exists."
-    """.trimIndent()
-    commandLine("bash", "-c", script)
+
+    val featureBranchName = "feature/${'$'}(date +%Y%m%d-%H%M%S)${featureSuffix}"
+    commandLine("bash", "-c", asGitHubScript(
+       """
+           USER_FEATURE="${'$'}{FEATURE_NAME:-${featureName}}"
+           if [ -n "${'$'}USER_FEATURE" ]; then
+             SAFE_FEATURE="${'$'}(printf '%s' "${'$'}USER_FEATURE" | sed 's/[^A-Za-z0-9._/-]/-/g; s#^/##; s#/$##; s#//\+#/#g')"
+             if [ -n "${'$'}SAFE_FEATURE" ]; then
+               BRANCH_NAME="feature/${'$'}SAFE_FEATURE"
+             else
+               BRANCH_NAME="feature/${'$'}(date +%Y%m%d-%H%M%S)${featureSuffix}"
+             fi
+           else
+             BRANCH_NAME="feature/${'$'}(date +%Y%m%d-%H%M%S)${featureSuffix}"
+           fi
+
+           if [ -n "${'$'}REMOTE_NAME" ] && git rev-parse --verify "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" >/dev/null 2>&1; then
+             git switch -C "${'$'}BRANCH_NAME" "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" 2>/dev/null || git checkout -B "${'$'}BRANCH_NAME" "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH"
+           else
+             git switch -C "${'$'}BRANCH_NAME" "${'$'}BASE_BRANCH" 2>/dev/null || git checkout -B "${'$'}BRANCH_NAME" "${'$'}BASE_BRANCH"
+           fi
+
+           if [ -n "${'$'}REMOTE_NAME" ]; then
+             git push -u "${'$'}REMOTE_NAME" "${'$'}BRANCH_NAME" || git push "${'$'}REMOTE_NAME" "${'$'}BRANCH_NAME" --set-upstream
+           fi
+
+           if command -v gh >/dev/null 2>&1; then
+             gh pr create --base "${'$'}BASE_BRANCH" --fill || echo "PR already exists or no changes."
+           fi
+       """.trimIndent()
+    ))
+    environment("FEATURE_NAME", featureName)
 }
 
 tasks.register<Exec>("githubMain") {
     group = "github"
-    description = "Syncs work and returns to a fresh, updated main branch."
+    description = "Returns the repo to its default branch and resets it to the remote state."
     dependsOn("githubSync")
-    commandLine("bash", "-c", "git checkout main && git fetch origin main && git reset --hard origin/main")
+    commandLine("bash", "-c", asGitHubScript(
+       """
+           if [ -n "${'$'}REMOTE_NAME" ] && git rev-parse --verify "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" >/dev/null 2>&1; then
+             git switch "${'$'}BASE_BRANCH" 2>/dev/null || git checkout "${'$'}BASE_BRANCH"
+             git fetch "${'$'}REMOTE_NAME" "${'$'}BASE_BRANCH"
+             git reset --hard "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH"
+           else
+             git switch "${'$'}BASE_BRANCH" 2>/dev/null || git checkout "${'$'}BASE_BRANCH"
+             git reset --hard "${'$'}BASE_BRANCH"
+           fi
+       """.trimIndent()
+    ))
 }
 
 tasks.register<Exec>("githubPR") {
     group = "github"
-    description = "Syncs current work and ensures a PR exists (idempotent)."
+    description = "Ensures the current branch has an open pull request against the repository default branch."
     dependsOn("githubSync")
-    commandLine("bash", "-c", "gh pr create --fill || echo 'PR already exists or no changes.'")
+    commandLine("bash", "-c", asGitHubScript(
+       """
+           if command -v gh >/dev/null 2>&1; then
+             gh pr create --base "${'$'}BASE_BRANCH" --fill || echo "PR already exists or no changes."
+           else
+             echo "GitHub CLI is not installed; skipping PR creation."
+           fi
+       """.trimIndent()
+    ))
 }
 
 tasks.register<Exec>("githubMerge") {
     group = "github"
-    description = "Syncs, updates, and enables auto-merge for the current branch."
+    description = "Enables auto-merge for the current branch PR and squashes it into the default branch."
     dependsOn("githubPR")
-    val script = """
-        PR_NUM=$(gh pr view --json number -q .number)
-        echo "🚀 Enabling auto-merge for PR #${'$'}PR_NUM..."
-        gh pr merge "${'$'}PR_NUM" --auto --squash --delete-branch
-    """.trimIndent()
-    commandLine("bash", "-c", script)
+    commandLine("bash", "-c", asGitHubScript(
+       """
+           if ! command -v gh >/dev/null 2>&1; then
+             echo "GitHub CLI is not installed; skipping merge."
+             exit 0
+           fi
+
+           PR_NUM="${'$'}(gh pr view --json number -q .number 2>/dev/null || true)"
+           if [ -z "${'$'}PR_NUM" ]; then
+             echo "No pull request found for the current branch."
+             exit 0
+           fi
+
+           echo "🚀 Enabling auto-merge for PR #${'$'}PR_NUM..."
+           gh pr merge "${'$'}PR_NUM" --auto --squash --delete-branch || true
+       """.trimIndent()
+    ))
 }
 
 tasks.register<Exec>("githubMergeAll") {
     group = "github"
-    description = "Updates and enables auto-merge for all OPEN Pull Requests."
+    description = "Updates and enables auto-merge for all open pull requests across the repo."
     dependsOn("githubSync")
-    val script = """
-        echo "🔍 Fetching open pull requests..."
-        gh pr list --state open --json number,title,mergeable,mergeStateStatus --template \
-          '{{range .}}{{.number}}{{"\t"}}{{.mergeable}}{{"\t"}}{{.mergeStateStatus}}{{"\t"}}{{.title}}{{"\n"}}{{end}}' | \
-          while IFS=${'$'}'\t' read -r pr mergeable status title; do
-            echo "------------------------------------------------------------"
-            echo "PR #${'$'}pr: ${'$'}title"
-            if [ "${'$'}mergeable" = "CONFLICTING" ]; then
-              echo "⚠️  Skipping: PR has hard conflicts."
-              continue
-            fi
-            if [ "${'$'}status" = "BEHIND" ]; then
-              echo "🔄 Syncing branch with main..."
-              gh pr update-branch "${'$'}pr" || echo "❌ Update failed."
-            fi
-            echo "🚀 Enabling auto-merge..."
-            gh pr merge "${'$'}pr" --auto --squash --delete-branch || echo "❌ Merge failed."
-          done
-    """.trimIndent()
-    commandLine("bash", "-c", script)
+    commandLine("bash", "-c", asGitHubScript(
+       """
+           if ! command -v gh >/dev/null 2>&1; then
+             echo "GitHub CLI is not installed; skipping bulk merge."
+             exit 0
+           fi
+
+           gh pr list --state open --json number,title,mergeable,mergeStateStatus --template \
+             '{{range .}}{{.number}}{{"\t"}}{{.mergeable}}{{"\t"}}{{.mergeStateStatus}}{{"\t"}}{{.title}}{{"\n"}}{{end}}' | \
+             while IFS=${'$'}'\t' read -r pr mergeable status title; do
+               echo "------------------------------------------------------------"
+               echo "PR #${'$'}pr: ${'$'}title"
+               if [ "${'$'}mergeable" = "CONFLICTING" ]; then
+                 echo "⚠️  Skipping: PR has hard conflicts."
+                 continue
+               fi
+               if [ "${'$'}status" = "BEHIND" ]; then
+                 echo "🔄 Updating branch with the default branch..."
+                 gh pr update-branch "${'$'}pr" || echo "❌ Update failed."
+               fi
+               echo "🚀 Enabling auto-merge..."
+               gh pr merge "${'$'}pr" --auto --squash --delete-branch || echo "❌ Merge failed."
+             done
+       """.trimIndent()
+    ))
 }
 
 tasks.register<Exec>("githubFixAll") {
     group = "github"
-    description = "Attempts to fix ALL open PRs by updating branches, resolving 'out-of-date' status, and rerunning failed CI."
+    description = "Attempts to fix all open PRs by updating them and rerunning failed workflow runs."
     dependsOn("githubSync")
-    val script = """
-        echo "🔍 Investigating all open Pull Requests..."
-        gh pr list --state open --json number,title,mergeable,mergeStateStatus,headRefName --template \
-          '{{range .}}{{.number}}{{"\t"}}{{.mergeable}}{{"\t"}}{{.mergeStateStatus}}{{"\t"}}{{.headRefName}}{{"\t"}}{{.title}}{{"\n"}}{{end}}' | \
-          while IFS=${'$'}'\t' read -r pr mergeable status branch title; do
-            echo "------------------------------------------------------------"
-            echo "PR #${'$'}pr: ${'$'}title"
-            
-            # 1. Resolve 'BEHIND' status automatically
-            if [ "${'$'}status" = "BEHIND" ]; then
-              echo "🔄 Branch is out-of-date. Syncing with main..."
-              gh pr update-branch "${'$'}pr" || echo "❌ Automatic update failed."
-            fi
+    commandLine("bash", "-c", asGitHubScript(
+       """
+           if ! command -v gh >/dev/null 2>&1; then
+             echo "GitHub CLI is not installed; skipping PR fixes."
+             exit 0
+           fi
 
-            # 2. Check for CI failures and rerun them
-            echo "📉 Checking CI status for branch '${'$'}branch'..."
-            RUN_ID=${'$'}(gh run list --branch "${'$'}branch" --status failure --limit 1 --json databaseId -q '.[].databaseId')
-            if [ -n "${'$'}RUN_ID" ]; then
-              echo "🛠️  Found failed CI run (${'$'}RUN_ID). Triggering rerun..."
-              gh run rerun "${'$'}RUN_ID" || echo "❌ Rerun trigger failed."
-            else
-              echo "✅ No failed CI runs found for this branch."
-            fi
+           gh pr list --state open --json number,title,mergeable,mergeStateStatus,headRefName --template \
+             '{{range .}}{{.number}}{{"\t"}}{{.mergeable}}{{"\t"}}{{.mergeStateStatus}}{{"\t"}}{{.headRefName}}{{"\t"}}{{.title}}{{"\n"}}{{end}}' | \
+             while IFS=${'$'}'\t' read -r pr mergeable status branch title; do
+               echo "------------------------------------------------------------"
+               echo "PR #${'$'}pr: ${'$'}title"
 
-            # 3. Enable auto-merge if possible
-            if [ "${'$'}mergeable" = "MERGEABLE" ]; then
-              echo "🚀 Enabling auto-merge (squash)..."
-              gh pr merge "${'$'}pr" --auto --squash --delete-branch || echo "❌ Auto-merge enablement failed."
-            fi
-          done
-    """.trimIndent()
-    commandLine("bash", "-c", script)
+               if [ "${'$'}status" = "BEHIND" ]; then
+                 echo "🔄 Branch is out-of-date. Updating with the default branch..."
+                 gh pr update-branch "${'$'}pr" || echo "❌ Automatic update failed."
+               fi
+
+               RUN_ID="${'$'}(gh run list --branch "${'$'}branch" --status failure --limit 1 --json databaseId -q '.[].databaseId' || true)"
+               if [ -n "${'$'}RUN_ID" ]; then
+                 echo "🛠️  Found failed CI run ${'$'}RUN_ID. Triggering rerun..."
+                 gh run rerun "${'$'}RUN_ID" || echo "❌ Rerun trigger failed."
+               else
+                 echo "✅ No failed CI runs found for this branch."
+               fi
+
+               if [ "${'$'}mergeable" = "MERGEABLE" ]; then
+                 echo "🚀 Enabling auto-merge (squash)..."
+                 gh pr merge "${'$'}pr" --auto --squash --delete-branch || echo "❌ Auto-merge enablement failed."
+               fi
+             done
+       """.trimIndent()
+    ))
 }
 
 tasks.register<Exec>("githubFixSecurity") {
     group = "github"
-    description = "Checks and attempts to resolve all Dependabot, Security, and Scanning alerts."
+    description = "Checks repository security alerts and merges any security-related PRs when appropriate."
     dependsOn("githubSync")
-    val script = """
-        echo "🛡️  Checking for Dependabot Security Alerts..."
-        gh api repos/:owner/:repo/dependabot/alerts -f state=open --jq '.[] | "🚨 [Dependabot] \(.security_advisory.summary) (\(.dependency.package.name))"' || echo "No Dependabot alerts or error fetching."
+    commandLine("bash", "-c", asGitHubScript(
+       """
+           if ! command -v gh >/dev/null 2>&1; then
+             echo "GitHub CLI is not installed; skipping security automation."
+             exit 0
+           fi
 
-        echo "🔍 Checking for Code Scanning Alerts..."
-        gh api repos/:owner/:repo/code-scanning/alerts -f state=open --jq '.[] | "⚠️  [Scanning] \(.rule.description) in \(.most_recent_instance.location.path)"' || echo "No Scanning alerts or error fetching."
+           echo "🛡️  Checking for Dependabot Security Alerts..."
+           gh api repos/:owner/:repo/dependabot/alerts -f state=open --jq '.[] | "🚨 [Dependabot] \(.security_advisory.summary) (\(.dependency.package.name))"' || echo "No Dependabot alerts or error fetching."
 
-        echo "------------------------------------------------------------"
-        echo "🚀 Triggering bulk merge for all available security fixes..."
-        # Filters for PRs that look like security fixes (Dependabot or chore: security)
-        gh pr list --state open --json number,title --template '{{range .}}{{.number}}{{"\t"}}{{.title}}{{"\n"}}{{end}}' | \
-          grep -E "dependabot|security|chore: automated sync" | \
-          while IFS=${'$'}'\t' read -r pr title; do
-            echo "Processing Security PR #${'$'}pr: ${'$'}title"
-            gh pr update-branch "${'$'}pr" 2>/dev/null || true
-            gh pr merge "${'$'}pr" --auto --squash --delete-branch || true
-          done
-    """.trimIndent()
-    commandLine("bash", "-c", script)
+           echo "🔍 Checking for Code Scanning Alerts..."
+           gh api repos/:owner/:repo/code-scanning/alerts -f state=open --jq '.[] | "⚠️  [Scanning] \(.rule.description) in \(.most_recent_instance.location.path)"' || echo "No code scanning alerts or error fetching."
+
+           echo "------------------------------------------------------------"
+           echo "🚀 Triggering bulk merge for available security fixes..."
+           gh pr list --state open --json number,title --template '{{range .}}{{.number}}{{"\t"}}{{.title}}{{"\n"}}{{end}}' | \
+             grep -E "dependabot|security|chore: automated sync" | \
+             while IFS=${'$'}'\t' read -r pr title; do
+               echo "Processing security PR #${'$'}pr: ${'$'}title"
+               gh pr update-branch "${'$'}pr" 2>/dev/null || true
+               gh pr merge "${'$'}pr" --auto --squash --delete-branch || true
+             done
+       """.trimIndent()
+    ))
 }
 
 tasks.register<Exec>("githubSetup") {
     group = "github"
-    description = "Optimizes GitHub repository settings for this workflow."
+    description = "Optimizes the repository settings for GitHub automation workflows."
     commandLine("gh", "repo", "edit", "--enable-auto-merge", "--delete-branch-on-merge", "--allow-update-branch", "--enable-squash-merge")
 }
 
