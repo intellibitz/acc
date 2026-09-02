@@ -61,3 +61,29 @@ Rebase skip pattern
 - Example (override): REBASE_SKIP_PATTERN='^(test/|automation/|wip/)' ./gradlew githubSync
 
 Update the pattern in CI if you use different branch prefixes for temporary or automation branches.
+
+Auto-clean tasks
+
+- githubCleanupRemoteBranches: Scans merged and closed PRs and (dry-run by default) deletes remote branches that are no longer needed. Enable actual deletion by setting the Gradle project property -PdeleteClosedPrBranches=true or environment variable DELETE_MODE=true in CI.
+
+- githubPruneLocalBranches: Scans local branches and (dry-run by default) deletes local branches that have no upstream, whose upstream was deleted, or which were merged into the base branch. Enable actual pruning by setting -PpruneLocalBranches=true or environment variable PRUNE_MODE=true in CI. The task respects REBASE_SKIP_PATTERN and will not delete the current branch or the base branch.
+
+Examples
+
+# Dry-run remote cleanup
+./gradlew githubCleanupRemoteBranches
+
+# Actual remote deletion (CI safe via secret)
+DELETE_MODE=true ./gradlew githubCleanupRemoteBranches
+
+# Dry-run local prune
+./gradlew githubPruneLocalBranches
+
+# Actual local prune (use with care)
+PRUNE_MODE=true ./gradlew githubPruneLocalBranches
+
+Notes
+
+- Both tasks default to dry-run and require explicit flags to mutate branches.
+- Prefer running these tasks in CI with repository secrets that gate deletions.
+- The scheduled automation workflow can be updated to call these tasks after githubMergeAll to keep branches tidy.

@@ -307,6 +307,104 @@ tasks.register<Exec>("githubMain") {
     ))
 }
 
+// Cleanup tasks: remote and local branch pruning
+
+val pruneLocalDefault = project.findProperty("pruneLocalBranches")?.toString()?.equals("true", ignoreCase = true) ?: false
+val deleteRemoteDefault = project.findProperty("deleteClosedPrBranches")?.toString()?.equals("true", ignoreCase = true) ?: false
+
+// Deletes remote branches for merged/closed PRs. Dry-run by default; set -PdeleteClosedPrBranches=true or env DELETE_REMOTE=true to actually delete.
+tasks.register<Exec>("githubCleanupRemoteBranches") {
+    group = "github"
+    description = "Lists merged/closed PR branches and optionally deletes remote refs. Safe by default."
+    commandLine("bash", "-c", asGitHubScript(
+        """
+            if ! command -v gh >/dev/null 2>&1; then
+              echo "GitHub CLI is not installed; skipping remote branch cleanup."
+              exit 0
+            fi
+
+            DELETE_MODE="${'$'}{DELETE_MODE:-${if (deleteRemoteDefault) "true" else "false"}}"
+            echo "🧹 Remote branch cleanup preview (DELETE_MODE=${'$'}DELETE_MODE)."
+
+            gh pr list --state merged --limit 500 --json number,headRefName,baseRefName --template \
+              '{{range .}}{{.number}}{{"\t"}}{{.headRefName}}{{"\t"}}{{.baseRefName}}{{"\n"}}{{end}}' | \
+              while IFS=${'$'}'\t' read -r pr branch base; do
+                if [ -z "${'$'}branch" ] || [ "${'$'}branch" = "${'$'}BASE_BRANCH" ]; then
+                  continue
+                fi
+                echo "Merged PR #${'$'}pr: ${'$'}branch -> ${'$'}base"
+                if [ "${'$'}DELETE_MODE" = "true" ]; then
+                  echo "Deleting remote branch ${'$'}branch..."
+                  gh api -X DELETE "repos/:owner/:repo/git/refs/heads/${'$'}branch" || echo "Failed to delete ${'$'}branch or branch protected."
+                else
+                  echo "[DRY-RUN] would delete remote branch: ${'$'}branch"
+                fi
+              done
+
+            gh pr list --state closed --limit 500 --json number,headRefName,baseRefName --template \
+              '{{range .}}{{.number}}{{"\t"}}{{.headRefName}}{{"\t"}}{{.baseRefName}}{{"\n"}}{{end}}' | \
+              while IFS=${'$'}'\t' read -r pr branch base; do
+                if [ -z "${'$'}branch" ] || [ "${'$'}branch" = "${'$'}BASE_BRANCH" ]; then
+                  continue
+                fi
+                echo "Closed PR #${'$'}pr: ${'$'}branch -> ${'$'}base"
+                if [ "${'$'}DELETE_MODE" = "true" ]; then
+                  echo "Deleting remote branch ${'$'}branch..."
+                  gh api -X DELETE "repos/:owner/:repo/git/refs/heads/${'$'}branch" || echo "Failed to delete ${'$'}branch or branch protected."
+                else
+                  echo "[DRY-RUN] would delete remote branch: ${'$'}branch"
+                fi
+              done
+        """.trimIndent()
+    ))
+    environment("DELETE_MODE", if (deleteRemoteDefault) "true" else "false")
+}
+
+// Deletes local branches that have no upstream, whose upstream was deleted, or that have been merged into the base branch.
+// Dry-run by default; set -PpruneLocalBranches=true or environment PRUNE_LOCAL=true to actually delete.
+tasks.register<Exec>("githubPruneLocalBranches") {
+    group = "github"
+    description = "Prunes local branches that are merged into base or whose remote was removed. Dry-run by default."
+    commandLine("bash", "-c", asGitHubScript(
+        """
+            PRUNE_MODE="${'$'}{PRUNE_MODE:-${if (pruneLocalDefault) "true" else "false"}}"
+            echo "Local prune preview (PRUNE_MODE=${'$'}PRUNE_MODE)."
+
+            git fetch --prune || true
+
+            git for-each-ref --format='%(refname:short) %(upstream:short)' refs/heads | while read -r local upstream; do
+              # skip current and base
+              if [ "${'$'}local" = "${'$'}CURRENT_BRANCH" ] || [ "${'$'}local" = "${'$'}BASE_BRANCH" ]; then
+                continue
+              fi
+
+              if [ -z "${'$'}upstream" ]; then
+                echo "[DRY-RUN] local branch ${'$'}local has no upstream"
+                if [ "${'$'}PRUNE_MODE" = "true" ]; then
+                  echo "Deleting local branch ${'$'}local"
+                  git branch -D "${'$'}local" || git branch -d "${'$'}local"
+                fi
+                continue
+              fi
+
+              # if upstream missing on remote
+              if ! git ls-remote --exit-code --heads "${'$'}REMOTE_NAME" "${'$'}local" >/dev/null 2>&1; then
+                echo "[DRY-RUN] remote branch for ${'$'}local missing"
+                if [ "${'$'}PRUNE_MODE" = "true" ]; then git branch -D "${'$'}local" || git branch -d "${'$'}local"; fi
+                continue
+              fi
+
+              # if local branch merged into remote/base
+              if git merge-base --is-ancestor "${'$'}local" "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" 2>/dev/null; then
+                echo "[DRY-RUN] local branch ${'$'}local is merged into ${'$'}BASE_BRANCH"
+                if [ "${'$'}PRUNE_MODE" = "true" ]; then git branch -D "${'$'}local" || git branch -d "${'$'}local"; fi
+              fi
+            done
+        """.trimIndent()
+    ))
+    environment("PRUNE_MODE", if (pruneLocalDefault) "true" else "false")
+}
+
 tasks.register<Exec>("githubPR") {
     group = "github"
     description = "Ensures the current branch has an open pull request against the repository default branch."
