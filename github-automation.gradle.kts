@@ -22,9 +22,12 @@ val gitHubCommonScript = """
       MSG="$*"
       VAL="${'$'}{!VAR_NAME:-}"
       VAL_LOWER="${'$'}(printf '%s' "${'$'}VAL" | tr '[:upper:]' '[:lower:]')"
-      if [ "${'$'}VAL_LOWER" = "true" ]; then
+
+      # Auto-confirm when explicitly set, when running in CI/GitHub Actions, or when AUTO_RESOLVE_MANUAL=true
+      if [ "${'$'}VAL_LOWER" = "true" ] || [ "${'$'}(printf '%s' "${'$'}AUTO_RESOLVE_MANUAL" | tr '[:upper:]' '[:lower:]')" = "true" ] || [ -n "${'$'}GITHUB_ACTIONS" ] || [ -n "${'$'}CI" ]; then
         return 0
       fi
+
       # If running interactively, ask the user; otherwise require explicit env flag
       if [ -t 1 ]; then
         read -r -p "${'$'}MSG [y/N]: " ans
@@ -33,7 +36,7 @@ val gitHubCommonScript = """
           *) echo "Aborted by user."; exit 1 ;;
         esac
       else
-      echo "${'$'}MSG - set ${'$'}VAR_NAME env var to true to confirm (non-interactive)" >&2
+        echo "${'$'}MSG - set ${'$'}VAR_NAME env var to true to confirm (non-interactive)" >&2
         exit 1
       fi
     }
@@ -48,11 +51,15 @@ val gitHubCommonScript = """
       if ! command -v gh >/dev/null 2>&1; then
         return 0
       fi
+      # If GITHUB_TOKEN is present (CI/GitHub Actions), treat as authenticated
+      if [ -n "${'$'}GITHUB_TOKEN" ]; then
+        return 0
+      fi
       if gh auth status >/dev/null 2>&1; then
         return 0
       fi
       echo "GitHub CLI 'gh' is installed but not authenticated. Run 'gh auth login' or set GH_SKIP_AUTH_CHECK=true to bypass." >&2
-      # If interactive, allow the user to confirm proceeding without gh auth via prompt; else abort.
+      # Allow auto-resolve in automation via AUTO_RESOLVE_MANUAL or explicit skip flag
       confirm_or_abort GH_SKIP_AUTH_CHECK "Proceed without gh authentication (remote operations may fail)?"
     }
 

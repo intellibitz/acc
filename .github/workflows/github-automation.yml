@@ -1,5 +1,11 @@
 name: GitHub Automation (Preflight + Optional Task)
 
+permissions:
+  contents: write
+  pull-requests: write
+  checks: write
+  issues: write
+
 on:
   workflow_dispatch:
     inputs:
