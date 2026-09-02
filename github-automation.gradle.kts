@@ -166,7 +166,6 @@ tasks.register<Exec>("githubSync") {
 
            if [ "${'$'}CURRENT_BRANCH" = "${'$'}BASE_BRANCH" ]; then
              echo "✅ Local base branch is up to date."
-           if [ "${'$'}CURRENT_BRANCH" = "${'$'}BASE_BRANCH" ]; then
              if [ -n "${'$'}REMOTE_NAME" ]; then
                git fetch "${'$'}REMOTE_NAME" "${'$'}BASE_BRANCH" || true
                git reset --hard "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" 2>/dev/null || git reset --hard "${'$'}BASE_BRANCH"
