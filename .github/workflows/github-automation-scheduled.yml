@@ -110,3 +110,17 @@ jobs:
         with:
           name: automation-audit
           path: automation-audit
+
+      - name: Report destructive actions
+        if: always()
+        run: |
+          if grep -qE "Deleting remote branch|Deleting local branch|Reset will drop|will be lost" automation-audit/audit.txt; then
+            TITLE="Automation alert: destructive actions in run $GITHUB_RUN_ID"
+            echo "Destructive actions detected. Creating or commenting on an issue: $TITLE"
+            # Create an issue with the audit details
+            gh issue create --title "$TITLE" --body-file automation-audit/audit.txt || echo "Failed to create issue"
+          else
+            echo "No destructive actions detected."
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

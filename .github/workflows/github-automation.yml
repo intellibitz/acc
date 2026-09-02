@@ -55,11 +55,6 @@ jobs:
           GH_SKIP_AUTH_CHECK: ${{ secrets.GH_SKIP_AUTH_CHECK != '' && secrets.GH_SKIP_AUTH_CHECK || 'true' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create audit log and upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: automation-audit
-          path: automation-audit
       - name: Build audit log
         if: always()
         run: |
@@ -75,6 +70,26 @@ jobs:
           gh pr list --state merged --limit 20 --json number,title,mergedAt --jq '.[] | "#\(.number) \(.title) (merged: \(.mergedAt))"' >> automation-audit/audit.txt || true
           echo "Open PRs summary:" >> automation-audit/audit.txt
           gh pr list --state open --limit 50 --json number,title,mergeable,mergeStateStatus --jq '.[] | "#\(.number) \(.title) mergeable=\(.mergeable) status=\(.mergeStateStatus)"' >> automation-audit/audit.txt || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create audit log artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: automation-audit
+          path: automation-audit
+
+      - name: Report destructive actions
+        if: always()
+        run: |
+          if grep -qE "Deleting remote branch|Deleting local branch|Reset will drop|will be lost" automation-audit/audit.txt; then
+            TITLE="Automation alert: destructive actions in run $GITHUB_RUN_ID"
+            echo "Destructive actions detected. Creating issue: $TITLE"
+            gh issue create --title "$TITLE" --body-file automation-audit/audit.txt || echo "Failed to create issue"
+          else
+            echo "No destructive actions detected."
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
