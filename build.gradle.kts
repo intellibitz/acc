@@ -6,6 +6,24 @@ buildscript {
             classpath("org.bouncycastle:bcprov-jdk18on:1.84") {
                 because("CVE-2024-34447")
             }
+            classpath("org.bouncycastle:bcpkix-jdk18on:1.84") {
+                because("CVE-2026-5588")
+            }
+            classpath("io.netty:netty-codec-http:4.2.17.Final") {
+                because("CVE-2026-59903")
+            }
+            classpath("org.apache.httpcomponents.client5:httpclient5:5.6.3") {
+                because("CVE-2026-64607")
+            }
+            classpath("com.fasterxml.jackson.core:jackson-databind:2.18.8") {
+                because("CVE-2026-54512")
+            }
+            classpath("io.opentelemetry:opentelemetry-api:1.62.0") {
+                because("CVE-2026-45292")
+            }
+            classpath("org.bitbucket.b_c:jose4j:0.9.6") {
+                because("CVE-2024-29371")
+            }
         }
     }
 }
@@ -108,4 +126,35 @@ tasks.register<Exec>("pushToGitHub") {
     description = "Pushes the current branch to GitHub (origin)."
     group = "publishing"
     commandLine("git", "push", "origin", "HEAD")
+}
+
+subprojects {
+    configurations.all {
+        resolutionStrategy.eachDependency {
+            if (requested.group == "io.netty" && requested.name.startsWith("netty-")) {
+                useVersion("4.2.17.Final")
+                because("CVE-2026-59903")
+            }
+            if (requested.group == "org.apache.httpcomponents.client5" && requested.name == "httpclient5") {
+                useVersion("5.6.3")
+                because("CVE-2026-64607")
+            }
+            if (requested.group == "com.fasterxml.jackson.core" && requested.name == "jackson-databind") {
+                useVersion("2.18.8")
+                because("CVE-2026-54512")
+            }
+            if (requested.group == "io.opentelemetry" && requested.name.startsWith("opentelemetry-")) {
+                useVersion("1.62.0")
+                because("CVE-2026-45292")
+            }
+            if (requested.group == "org.bouncycastle" && requested.name.startsWith("bc")) {
+                useVersion("1.84")
+                because("CVE-2026-5588")
+            }
+            if (requested.group == "org.bitbucket.b_c" && requested.name == "jose4j") {
+                useVersion("0.9.6")
+                because("CVE-2024-29371")
+            }
+        }
+    }
 }
