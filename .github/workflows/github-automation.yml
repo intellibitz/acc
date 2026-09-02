@@ -54,3 +54,27 @@ jobs:
           FORCE_PUSH_CONFIRM: ${{ secrets.FORCE_PUSH_CONFIRM != '' && secrets.FORCE_PUSH_CONFIRM || 'true' }}
           GH_SKIP_AUTH_CHECK: ${{ secrets.GH_SKIP_AUTH_CHECK != '' && secrets.GH_SKIP_AUTH_CHECK || 'true' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create audit log and upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: automation-audit
+          path: automation-audit
+      - name: Build audit log
+        if: always()
+        run: |
+          mkdir -p automation-audit
+          echo "Timestamp: $(date -u)" > automation-audit/audit.txt
+          echo "Triggered by: ${{ github.event_name }}" >> automation-audit/audit.txt
+          echo "Requested task: ${{ github.event.inputs.gradle_task }}" >> automation-audit/audit.txt
+          echo "MAIN_RESET_CONFIRM=${{ secrets.MAIN_RESET_CONFIRM != '' && secrets.MAIN_RESET_CONFIRM || 'true' }}" >> automation-audit/audit.txt
+          echo "FORCE_PUSH_CONFIRM=${{ secrets.FORCE_PUSH_CONFIRM != '' && secrets.FORCE_PUSH_CONFIRM || 'true' }}" >> automation-audit/audit.txt
+          echo "GH_SKIP_AUTH_CHECK=${{ secrets.GH_SKIP_AUTH_CHECK != '' && secrets.GH_SKIP_AUTH_CHECK || 'true' }}" >> automation-audit/audit.txt
+          echo "GITHUB_REF=${{ github.ref }}" >> automation-audit/audit.txt
+          echo "Recent merged PRs:" >> automation-audit/audit.txt
+          gh pr list --state merged --limit 20 --json number,title,mergedAt --jq '.[] | "#\(.number) \(.title) (merged: \(.mergedAt))"' >> automation-audit/audit.txt || true
+          echo "Open PRs summary:" >> automation-audit/audit.txt
+          gh pr list --state open --limit 50 --json number,title,mergeable,mergeStateStatus --jq '.[] | "#\(.number) \(.title) mergeable=\(.mergeable) status=\(.mergeStateStatus)"' >> automation-audit/audit.txt || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

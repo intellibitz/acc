@@ -85,3 +85,28 @@ jobs:
           FORCE_PUSH_CONFIRM: ${{ secrets.FORCE_PUSH_CONFIRM != '' && secrets.FORCE_PUSH_CONFIRM || 'true' }}
           GH_SKIP_AUTH_CHECK: ${{ secrets.GH_SKIP_AUTH_CHECK != '' && secrets.GH_SKIP_AUTH_CHECK || 'true' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build audit log
+        if: always()
+        run: |
+          mkdir -p automation-audit
+          echo "Timestamp: $(date -u)" > automation-audit/audit.txt
+          echo "Event: ${{ github.event_name }}" >> automation-audit/audit.txt
+          echo "Run tasks input: ${{ github.event.inputs.run_tasks || 'all' }}" >> automation-audit/audit.txt
+          echo "MAIN_RESET_CONFIRM=${{ secrets.MAIN_RESET_CONFIRM != '' && secrets.MAIN_RESET_CONFIRM || 'true' }}" >> automation-audit/audit.txt
+          echo "FORCE_PUSH_CONFIRM=${{ secrets.FORCE_PUSH_CONFIRM != '' && secrets.FORCE_PUSH_CONFIRM || 'true' }}" >> automation-audit/audit.txt
+          echo "DELETE_REMOTE_BRANCHES=${{ secrets.DELETE_REMOTE_BRANCHES != '' && secrets.DELETE_REMOTE_BRANCHES || 'true' }}" >> automation-audit/audit.txt
+          echo "PRUNE_LOCAL_BRANCHES=${{ secrets.PRUNE_LOCAL_BRANCHES != '' && secrets.PRUNE_LOCAL_BRANCHES || 'true' }}" >> automation-audit/audit.txt
+          echo "Merged PRs (recent):" >> automation-audit/audit.txt
+          gh pr list --state merged --limit 50 --json number,title,mergedAt --jq '.[] | "#\(.number) \(.title) (merged: \(.mergedAt))"' >> automation-audit/audit.txt || true
+          echo "Branches on remote (top 200):" >> automation-audit/audit.txt
+          gh api repos/${{ github.repository }}/branches --jq '.[] | .name' | head -n 200 >> automation-audit/audit.txt || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload audit artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: automation-audit
+          path: automation-audit
