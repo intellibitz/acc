@@ -132,6 +132,28 @@ open class FixAllTask : BaseGitHubTask() {
     }
 }
 
+open class MainTask : DefaultTask() {
+    @TaskAction
+    fun run() {
+        val git = Git.open(project.rootDir)
+        val repo = git.repository
+        val base = (project.findProperty("BASE_BRANCH") as? String) ?: System.getenv("BASE_BRANCH") ?: repo.branch
+        try {
+            git.checkout().setName(base).call()
+            git.fetch().setRemote("origin").call()
+            val remoteRef = repo.resolve("refs/remotes/origin/${base}")
+            if (remoteRef != null) {
+                git.reset().setRef(remoteRef.name).setMode(org.eclipse.jgit.api.ResetCommand.ResetType.HARD).call()
+                logger.lifecycle("Reset local ${base} to origin/${base}")
+            } else {
+                logger.lifecycle("Remote ref origin/${base} not found; skipping reset")
+            }
+        } catch (e: Exception) {
+            logger.warn("Failed to reset main: ${e.message}")
+        }
+    }
+}
+
 open class FeatureTask : BaseGitHubTask() {
     @TaskAction
     fun run() {
@@ -146,6 +168,29 @@ open class FeatureTask : BaseGitHubTask() {
             logger.lifecycle("Created and pushed branch ${branch}")
         } catch (e: Exception) {
             logger.warn("Failed to create feature branch: ${e.message}")
+        }
+    }
+}
+
+// MainTask is implemented below
+open class MainTask : DefaultTask() {
+    @TaskAction
+    fun run() {
+        val git = Git.open(project.rootDir)
+        val repo = git.repository
+        val base = (project.findProperty("BASE_BRANCH") as? String) ?: System.getenv("BASE_BRANCH") ?: repo.branch
+        try {
+            git.checkout().setName(base).call()
+            git.fetch().setRemote("origin").call()
+            val remoteRef = repo.resolve("refs/remotes/origin/${base}")
+            if (remoteRef != null) {
+                git.reset().setRef(remoteRef.name).setMode(org.eclipse.jgit.api.ResetCommand.ResetType.HARD).call()
+                logger.lifecycle("Reset local ${base} to origin/${base}")
+            } else {
+                logger.lifecycle("Remote ref origin/${base} not found; skipping reset")
+            }
+        } catch (e: Exception) {
+            logger.warn("Failed to reset main: ${e.message}")
         }
     }
 }
