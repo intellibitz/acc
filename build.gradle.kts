@@ -12,10 +12,10 @@ buildscript {
             classpath("io.netty:netty-codec-http:4.2.17.Final") {
                 because("CVE-2026-59903")
             }
-            classpath("org.apache.httpcomponents.client5:httpclient5:5.6.3") {
+            classpath("org.apache.httpcomponents.client5:httpclient5:5.6.4") {
                 because("CVE-2026-64607")
             }
-            classpath("com.fasterxml.jackson.core:jackson-databind:2.18.8") {
+            classpath("com.fasterxml.jackson.core:jackson-databind:2.18.9") {
                 because("CVE-2026-54512")
             }
             classpath("io.opentelemetry:opentelemetry-api:1.62.0") {
