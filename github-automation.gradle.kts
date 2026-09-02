@@ -33,7 +33,7 @@ val gitHubCommonScript = """
           *) echo "Aborted by user."; exit 1 ;;
         esac
       else
-        echo "${'$'}MSG - set ${'$'}${VAR_NAME}=true to confirm (non-interactive)" >&2
+      echo "${'$'}MSG - set ${'$'}VAR_NAME env var to true to confirm (non-interactive)" >&2
         exit 1
       fi
     }
