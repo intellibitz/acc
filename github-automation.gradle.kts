@@ -814,6 +814,65 @@ tasks.register<Exec>("githubRemoveObsoleteBranches") {
     environment("REMOVE_MODE", if (removeObsoleteDefault) "true" else "false")
 }
 
+// New task: removes local obsolete branches based on inactivity or merged criteria.
+tasks.register<Exec>("githubRemoveLocalObsoleteBranches") {
+    group = "github"
+    description = "Prunes local branches that are merged into base, have no upstream, or are older than OBSELETE_DAYS. Dry-run by default; set -PpruneLocalBranches=true or env PRUNE_LOCAL_MODE=true to delete."
+    commandLine("bash", "-c", asGitHubScript(
+      """
+        PRUNE_LOCAL_MODE="${'$'}{PRUNE_LOCAL_MODE:-${if (pruneLocalDefault) "true" else "false"}}"
+        DAYS="${'$'}{PRUNE_LOCAL_DAYS:-${obsoleteDays}}"
+        echo "Local prune preview (PRUNE_LOCAL_MODE=${'$'}PRUNE_LOCAL_MODE) - branches older than ${'$'}DAYS days without upstream or merged into base will be removed."
+
+        git fetch --prune || true
+
+        git for-each-ref --format='%(refname:short)' refs/heads | while read -r local; do
+          # skip current and base
+          if [ "${'$'}local" = "${'$'}CURRENT_BRANCH" ] || [ "${'$'}local" = "${'$'}BASE_BRANCH" ]; then
+            continue
+          fi
+
+          # check upstream
+          upstream="${'$'}(git for-each-ref --format='%(upstream:short)' refs/heads/${'$'}local)"
+          if [ -z "${'$'}upstream" ]; then
+            echo "[DRY-RUN] local branch ${'$'}local has no upstream"
+            dt="${'$'}(git log -1 --format=%ci ${'$'}local 2>/dev/null || true)"
+            if [ -z "${'$'}dt" ]; then
+              echo "  Could not determine commit date for ${'$'}local; skipping."
+              continue
+            fi
+            branch_epoch="${'$'}(date -d "${'$'}dt" +%s)"
+            cutoff="${'$'}(date -d "-${'$'}DAYS days" +%s)"
+            if [ "${'$'}branch_epoch" -lt "${'$'}cutoff" ]; then
+              echo "${'$'}local is older than ${'$'}DAYS days and has no upstream; eligible for deletion."
+              if [ "${'$'}PRUNE_LOCAL_MODE" = "true" ]; then
+                echo "Deleting local branch ${'$'}local..."
+                git branch -D "${'$'}local" || git branch -d "${'$'}local"
+              else
+                echo "[DRY-RUN] would delete local branch: ${'$'}local"
+              fi
+            else
+              echo "${'$'}local is recent; skipping."
+            fi
+            continue
+          fi
+
+          # if merged into remote/base
+          if git merge-base --is-ancestor "${'$'}local" "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" 2>/dev/null || git merge-base --is-ancestor "${'$'}local" "${'$'}BASE_BRANCH" 2>/dev/null; then
+            echo "Local branch ${'$'}local is merged into base; eligible for deletion."
+            if [ "${'$'}PRUNE_LOCAL_MODE" = "true" ]; then
+              echo "Deleting local branch ${'$'}local..."
+              git branch -D "${'$'}local" || git branch -d "${'$'}local"
+            else
+              echo "[DRY-RUN] would delete local branch: ${'$'}local"
+            fi
+          fi
+        done
+      """.trimIndent()
+    ))
+    environment("PRUNE_LOCAL_MODE", if (pruneLocalDefault) "true" else "false")
+}
+
 tasks.register<Exec>("githubActions") {
     group = "github"
     description = "Opens the GitHub Actions tab in your default browser."
