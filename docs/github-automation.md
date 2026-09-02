@@ -62,6 +62,33 @@ Rebase skip pattern
 
 Update the pattern in CI if you use different branch prefixes for temporary or automation branches.
 
+Automation tasks summary
+
+- github: High-level alias that runs githubSync, githubMergeAll, and githubStatus.
+- githubStatus: Show repo, current/default branch, and PR status.
+- githubSync: Safely update the default branch locally, capture local work, rebase current branch onto latest base (skips branches matching REBASE_SKIP_PATTERN), and push with lease. Guards against destructive resets and requires MAIN_RESET_CONFIRM/FORCE_PUSH_CONFIRM for risky operations.
+- githubFeature: Create a feature branch from the default branch and open a PR.
+- githubPR: Ensure the current branch has an open PR (creates one if missing).
+- githubMerge: Enable auto-merge for the current branch PR (squash + delete branch on merge).
+- githubMergeAll: Update all open PR branches and enable auto-merge for mergeable PRs.
+- githubFixAll: Update PR branches, rerun failed CI runs, and enable auto-merge where appropriate.
+- githubFixSecurity: Bulk-update and merge security-related PRs (Dependabot) when safe.
+- githubMain: Reset local default branch to the remote state (requires confirmation and protects against data loss).
+- githubCleanupClosedPRs / githubCleanupRemoteBranches: Scan merged/closed PRs and (dry-run by default) delete stale remote branches; enable actual deletion via DELETE_MODE/Gradle property.
+- githubPruneLocalBranches: Prune local branches with no upstream, whose upstream was deleted, or merged into the base branch (dry-run by default; enable with PRUNE_MODE).
+- githubPreflight: Pre-flight checks for gh authentication and effective flags (MAIN_RESET_CONFIRM, FORCE_PUSH_CONFIRM, GH_SKIP_AUTH_CHECK). Intended for CI and local safety.
+- githubSetup: Convenience task to enable repo settings (auto-merge, delete-branch-on-merge, allow update-branch, enable squash merge).
+- githubChecks: Show CI/checks status for the current PR/branch.
+- githubPRSummary / githubSummary: Print a safe PR summary (open PRs, merged PRs, stale branches) and recommended actions.
+- githubIssues, githubWiki, githubActions: Utility tasks to open/list issues, wiki, and actions UI.
+
+Notes
+
+- All destructive actions are guarded and default to dry-run unless enabled via explicit env flags or Gradle properties. The CI workflows default these flags to 'true' but can be overridden by repository secrets.
+- Automation creates an audit artifact (automation-audit) with run details; destructive operations trigger an issue comment or creation labeled 'automation-alert'.
+
+
+
 Auto-clean tasks
 
 - githubCleanupRemoteBranches: Scans merged and closed PRs and (dry-run by default) deletes remote branches that are no longer needed. Enable actual deletion by setting the Gradle project property -PdeleteClosedPrBranches=true or environment variable DELETE_MODE=true in CI.
