@@ -42,6 +42,7 @@ plugins {
 }
 
 // Apply modular GitHub automation powers
+apply(plugin = "automation-plugin")
 apply(from = "github-automation.gradle.kts")
 
 // Configuration cache compatible versioning helper

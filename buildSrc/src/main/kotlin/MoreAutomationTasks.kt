@@ -3,6 +3,8 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 
 import org.gradle.api.tasks.TaskAction
+import org.gradle.api.tasks.Internal
+import org.gradle.api.tasks.Input
 import org.gradle.api.DefaultTask
 
 // Implement tasks using 'git' and 'gh' CLIs for portability and to avoid external Java deps.
@@ -10,8 +12,8 @@ import org.gradle.api.DefaultTask
 open class PRTask : BaseGitHubTask() {
     @TaskAction
     fun run() {
-        val branch = (project.findProperty("CURRENT_BRANCH") as? String) ?: System.getenv("CURRENT_BRANCH") ?: ""
-        val base = (project.findProperty("BASE_BRANCH") as? String) ?: System.getenv("BASE_BRANCH") ?: "main"
+        val branch = currentBranchInput
+        val base = if (baseBranchInput.isNotBlank()) baseBranchInput else "main"
         val repo = repoFull()
         if (branch.isBlank()) {
             logger.lifecycle("No current branch provided; skipping PR creation.")
@@ -33,7 +35,7 @@ open class PRTask : BaseGitHubTask() {
 open class MergeTask : BaseGitHubTask() {
     @TaskAction
     fun run() {
-        val branch = (project.findProperty("CURRENT_BRANCH") as? String) ?: System.getenv("CURRENT_BRANCH") ?: ""
+        val branch = currentBranchInput
         val repo = repoFull()
         if (branch.isBlank()) {
             logger.lifecycle("No current branch provided; skipping merge.")
@@ -75,8 +77,8 @@ open class MergeAllTask : BaseGitHubTask() {
 open class SyncTask : BaseGitHubTask() {
     @TaskAction
     fun run() {
-        val repoDir = project.rootDir
-        val base = (project.findProperty("BASE_BRANCH") as? String) ?: System.getenv("BASE_BRANCH") ?: "main"
+        val repoDir = rootDir
+        val base = if (baseBranchInput.isNotBlank()) baseBranchInput else "main"
         runCmd("git", "fetch", "origin", workingDir = repoDir)
         val (rc, out) = runCmd("git", "checkout", base, workingDir = repoDir)
         if (rc != 0) { logger.warn("Checkout failed: ${out}"); return }
@@ -96,13 +98,20 @@ open class CleanupRemoteBranchesTask : BaseGitHubTask() {
 }
 
 open class PruneLocalBranchesTask : DefaultTask() {
+    @get:Internal
+    val rootDir: File = project.rootDir
+
+    @get:Input
+    val pruneModeInput: Boolean = (project.findProperty("PRUNE_LOCAL_MODE") as? String)?.toBoolean() ?: (System.getenv("PRUNE_LOCAL_MODE")?.toBoolean() ?: false)
+
+    @get:Input
+    val pruneDaysInput: Long = (project.findProperty("PRUNE_LOCAL_DAYS") as? String)?.toLong() ?: (System.getenv("PRUNE_LOCAL_DAYS")?.toLong() ?: 90L)
+
     @TaskAction
     fun run() {
-        val pruneMode = (project.findProperty("PRUNE_LOCAL_MODE") as? String)?.toBoolean() ?: (System.getenv("PRUNE_LOCAL_MODE")?.toBoolean() ?: false)
-        val days = (project.findProperty("PRUNE_LOCAL_DAYS") as? String)?.toLong() ?: (System.getenv("PRUNE_LOCAL_DAYS")?.toLong() ?: 90L)
-        val repoDir = project.rootDir
-        val cutoff = Instant.now().minus(days, ChronoUnit.DAYS)
-        logger.lifecycle("Pruning local branches older than ${days} days. Dry-run=${!pruneMode}")
+        val repoDir = rootDir
+        val cutoff = Instant.now().minus(pruneDaysInput, ChronoUnit.DAYS)
+        logger.lifecycle("Pruning local branches older than ${pruneDaysInput} days. Dry-run=${!pruneModeInput}")
         val (rc, out) = runCmd("git", "for-each-ref", "--format=%(refname:short) %(committerdate:iso8601)", "refs/heads/", workingDir = repoDir)
         if (rc != 0) { logger.warn("Failed to enumerate local branches: ${out}"); return }
         out.lines().forEach { line ->
@@ -114,8 +123,8 @@ open class PruneLocalBranchesTask : DefaultTask() {
             try {
                 val date = Instant.parse(dateStr)
                 if (date.isBefore(cutoff)) {
-                    logger.lifecycle("Local branch ${name} last commit ${date} older than ${days} days; eligible for deletion.")
-                    if (pruneMode) {
+                    logger.lifecycle("Local branch ${name} last commit ${date} older than ${pruneDaysInput} days; eligible for deletion.")
+                    if (pruneModeInput) {
                         val (rcd, od) = runCmd("git", "branch", "-D", name, workingDir = repoDir)
                         if (rcd == 0) logger.lifecycle("Deleted local branch ${name}") else logger.warn("Failed delete ${name}: ${od}")
                     }
@@ -189,11 +198,14 @@ open class SimpleTaskLogger : DefaultTask() {
 
 
 open class FeatureTask : BaseGitHubTask() {
+    @get:Input
+    val featureNameInput: String = (project.findProperty("featureName") as? String) ?: (project.findProperty("name") as? String) ?: ""
+
     @TaskAction
     fun run() {
-        val repoDir = project.rootDir
-        val featureName = (project.findProperty("featureName") as? String) ?: (project.findProperty("name") as? String) ?: "feature-${System.currentTimeMillis()}"
-        val safe = featureName.replace(Regex("[^A-Za-z0-9._/-]"), "-").trim('-')
+        val repoDir = rootDir
+        val nameToUse = if (featureNameInput.isNotBlank()) featureNameInput else "feature-${System.currentTimeMillis()}"
+        val safe = nameToUse.replace(Regex("[^A-Za-z0-9._/-]"), "-").trim('-')
         val branch = "feature/${safe}"
         val (rc, out) = runCmd("git", "checkout", "-b", branch, workingDir = repoDir)
         if (rc != 0) { logger.warn("Failed to create branch: ${out}"); return }
@@ -204,10 +216,16 @@ open class FeatureTask : BaseGitHubTask() {
 
 // MainTask is implemented below
 open class MainTask : DefaultTask() {
+    @get:Internal
+    val rootDir: File = project.rootDir
+
+    @get:Input
+    val baseBranchInput: String = (project.findProperty("BASE_BRANCH") as? String) ?: System.getenv("BASE_BRANCH") ?: "main"
+
     @TaskAction
     fun run() {
-        val repoDir = project.rootDir
-        val base = (project.findProperty("BASE_BRANCH") as? String) ?: System.getenv("BASE_BRANCH") ?: "main"
+        val repoDir = rootDir
+        val base = if (baseBranchInput.isNotBlank()) baseBranchInput else "main"
         runCmd("git", "checkout", base, workingDir = repoDir)
         runCmd("git", "fetch", "origin", workingDir = repoDir)
         val (rc2, out2) = runCmd("git", "reset", "--hard", "origin/${base}", workingDir = repoDir)

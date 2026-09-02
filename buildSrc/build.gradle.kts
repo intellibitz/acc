@@ -2,6 +2,15 @@ plugins {
     `kotlin-dsl`
 }
 
+gradlePlugin {
+    plugins {
+        create("automationPlugin") {
+            id = "automation-plugin"
+            implementationClass = "AutomationPlugin"
+        }
+    }
+}
+
 repositories {
     mavenCentral()
     mavenLocal()
