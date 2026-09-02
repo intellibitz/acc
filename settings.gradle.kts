@@ -14,6 +14,24 @@ buildscript {
             classpath("org.bouncycastle:bcprov-jdk18on:1.84") {
                 because("CVE-2024-34447")
             }
+            classpath("org.bouncycastle:bcpkix-jdk18on:1.84") {
+                because("CVE-2026-5588")
+            }
+            classpath("io.netty:netty-codec-http:4.2.17.Final") {
+                because("CVE-2026-59903")
+            }
+            classpath("org.apache.httpcomponents.client5:httpclient5:5.6.3") {
+                because("CVE-2026-64607")
+            }
+            classpath("com.fasterxml.jackson.core:jackson-databind:2.18.8") {
+                because("CVE-2026-54512")
+            }
+            classpath("io.opentelemetry:opentelemetry-api:1.62.0") {
+                because("CVE-2026-45292")
+            }
+            classpath("org.bitbucket.b_c:jose4j:0.9.6") {
+                because("CVE-2024-29371")
+            }
         }
     }
 }
