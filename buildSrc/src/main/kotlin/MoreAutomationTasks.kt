@@ -132,6 +132,54 @@ open class FixAllTask : BaseGitHubTask() {
     }
 }
 
+open class PRSummaryTask : BaseGitHubTask() {
+    @TaskAction
+    fun run() {
+        val r = repo()
+        logger.lifecycle("Open PRs:")
+        val open = r.listPullRequests(GHPullRequest.PULL_REQUEST_STATE.OPEN)
+        for (pr in open) {
+            logger.lifecycle("#${pr.number} ${pr.title} -> ${pr.head.ref} mergeable=${pr.mergeableState}")
+        }
+        logger.lifecycle("Merged PRs (recent):")
+        val merged = r.queryPullRequests().state(GHPullRequest.PULL_REQUEST_STATE.MERGED).list()
+        for (pr in merged) {
+            logger.lifecycle("#${pr.number} ${pr.title} -> ${pr.head.ref}")
+        }
+    }
+}
+
+open class FixSecurityTask : BaseGitHubTask() {
+    @TaskAction
+    fun run() {
+        val r = repo()
+        logger.lifecycle("Looking for Dependabot/ security PRs to merge...")
+        val open = r.listPullRequests(GHPullRequest.PULL_REQUEST_STATE.OPEN)
+        for (pr in open) {
+            val title = pr.title.toLowerCase()
+            if (title.contains("dependabot") || title.contains("security")) {
+                try {
+                    if (pr.mergeableState == "MERGEABLE") {
+                        pr.merge("Automated security merge")
+                        logger.lifecycle("Merged security PR #${pr.number}: ${pr.title}")
+                    } else {
+                        logger.lifecycle("Security PR #${pr.number} not mergeable: ${pr.mergeableState}")
+                    }
+                } catch (e: Exception) {
+                    logger.warn("Failed to merge security PR #${pr.number}: ${e.message}")
+                }
+            }
+        }
+    }
+}
+
+open class SimpleTaskLogger : DefaultTask() {
+    @TaskAction
+    fun run() {
+        logger.lifecycle("This is a placeholder task for simple actions (issues/wiki/checks).")
+    }
+}
+
 open class MainTask : DefaultTask() {
     @TaskAction
     fun run() {

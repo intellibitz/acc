@@ -29,6 +29,11 @@ open class AutomationPlugin : Plugin<Project> {
         project.tasks.register("githubCleanupRemoteBranchesKotlin", CleanupRemoteBranchesTask::class.java)
         project.tasks.register("githubPruneLocalBranchesKotlin", PruneLocalBranchesTask::class.java)
         project.tasks.register("githubFixAllKotlin", FixAllTask::class.java)
+        project.tasks.register("githubPRSummaryKotlin", PRSummaryTask::class.java)
+        project.tasks.register("githubFixSecurityKotlin", FixSecurityTask::class.java)
+        project.tasks.register("githubChecksKotlin", SimpleTaskLogger::class.java)
+        project.tasks.register("githubIssuesKotlin", SimpleTaskLogger::class.java)
+        project.tasks.register("githubWikiKotlin", SimpleTaskLogger::class.java)
     }
 }
 
