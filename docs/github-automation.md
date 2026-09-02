@@ -32,3 +32,23 @@ Notes
   - Prefer authenticating 'gh' in CI instead of bypassing the auth check.
 
 - The docs live in docs/github-automation.md; update as needed when behavior changes.
+
+CI workflow example
+
+Below is an example GitHub Actions workflow (also committed to .github/workflows/github-automation.yml) that runs the preflight checks and optionally runs a Gradle automation task if provided via workflow_dispatch. Key points:
+
+- The workflow runs ./gradlew githubPreflight first to verify gh authentication and the MAIN_RESET_CONFIRM/FORCE_PUSH_CONFIRM flags.
+- For non-interactive CI runs set MAIN_RESET_CONFIRM and FORCE_PUSH_CONFIRM as repository secrets (or leave unset to prevent destructive changes).
+- Prefer authenticating gh in CI using GITHUB_TOKEN rather than bypassing with GH_SKIP_AUTH_CHECK.
+
+Snippet to include in other workflows (example step):
+
+  - name: Run automation preflight
+    run: ./gradlew githubPreflight
+    env:
+      MAIN_RESET_CONFIRM: ${{ secrets.MAIN_RESET_CONFIRM }}
+      FORCE_PUSH_CONFIRM: ${{ secrets.FORCE_PUSH_CONFIRM }}
+      GH_SKIP_AUTH_CHECK: ${{ secrets.GH_SKIP_AUTH_CHECK }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+Add this preflight step before any step that calls the actionable Gradle tasks (githubSync, githubMergeAll, githubMain, etc.).

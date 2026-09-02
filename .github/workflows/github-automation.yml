@@ -1,0 +1,56 @@
+name: GitHub Automation (Preflight + Optional Task)
+
+on:
+  workflow_dispatch:
+    inputs:
+      gradle_task:
+        description: 'Gradle automation task to run after preflight (e.g., githubMergeAll). Leave empty to only run preflight.'
+        required: false
+        default: 'githubMergeAll'
+  push:
+    branches: [ main ]
+
+jobs:
+  automation:
+    name: Automation with Preflight
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Run Gradle wrapper
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --version
+
+      - name: Preflight (gh auth and env checks)
+        run: ./gradlew githubPreflight
+        env:
+          # CI should set these secrets/vars explicitly when destructive ops are intended
+          MAIN_RESET_CONFIRM: ${{ secrets.MAIN_RESET_CONFIRM }}
+          FORCE_PUSH_CONFIRM: ${{ secrets.FORCE_PUSH_CONFIRM }}
+          GH_SKIP_AUTH_CHECK: ${{ secrets.GH_SKIP_AUTH_CHECK }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run requested automation task (optional)
+        if: ${{ github.event.inputs.gradle_task != '' }}
+        run: |
+          TASK="${{ github.event.inputs.gradle_task }}"
+          if [ -n "${TASK}" ]; then
+            echo "Running Gradle task: ${TASK}"
+            ./gradlew "${TASK}"
+          else
+            echo "No automation task specified; skipping."
+          fi
+        env:
+          MAIN_RESET_CONFIRM: ${{ secrets.MAIN_RESET_CONFIRM }}
+          FORCE_PUSH_CONFIRM: ${{ secrets.FORCE_PUSH_CONFIRM }}
+          GH_SKIP_AUTH_CHECK: ${{ secrets.GH_SKIP_AUTH_CHECK }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
