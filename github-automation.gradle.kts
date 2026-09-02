@@ -124,19 +124,63 @@ tasks.register<Exec>("githubMergeAll") {
 
 tasks.register<Exec>("githubFixAll") {
     group = "github"
-    description = "Attempts to fix failed PRs by updating their branches and rerunning CI."
+    description = "Attempts to fix ALL open PRs by updating branches, resolving 'out-of-date' status, and rerunning failed CI."
     dependsOn("githubSync")
     val script = """
-        gh pr list --json number -q '.[].number' | while read -r pr; do
-          echo "Processing PR #${'$'}pr..."
-          gh pr update-branch "${'$'}pr" || true
-          BRANCH=${'$'}(gh pr view "${'$'}pr" --json headRefName -q .headRefName)
-          RUN_ID=${'$'}(gh run list --branch "${'$'}BRANCH" --status failure --limit 1 --json databaseId -q '.[].databaseId')
-          if [ -n "${'$'}RUN_ID" ]; then
-            echo "Rerunning failed CI run (${'$'}RUN_ID) for PR #${'$'}pr..."
-            gh run rerun "${'$'}RUN_ID" || true
-          fi
-        done
+        echo "🔍 Investigating all open Pull Requests..."
+        gh pr list --state open --json number,title,mergeable,mergeStateStatus,headRefName --template \
+          '{{range .}}{{.number}}{{"\t"}}{{.mergeable}}{{"\t"}}{{.mergeStateStatus}}{{"\t"}}{{.headRefName}}{{"\t"}}{{.title}}{{"\n"}}{{end}}' | \
+          while IFS=${'$'}'\t' read -r pr mergeable status branch title; do
+            echo "------------------------------------------------------------"
+            echo "PR #${'$'}pr: ${'$'}title"
+            
+            # 1. Resolve 'BEHIND' status automatically
+            if [ "${'$'}status" = "BEHIND" ]; then
+              echo "🔄 Branch is out-of-date. Syncing with main..."
+              gh pr update-branch "${'$'}pr" || echo "❌ Automatic update failed."
+            fi
+
+            # 2. Check for CI failures and rerun them
+            echo "📉 Checking CI status for branch '${'$'}branch'..."
+            RUN_ID=${'$'}(gh run list --branch "${'$'}branch" --status failure --limit 1 --json databaseId -q '.[].databaseId')
+            if [ -n "${'$'}RUN_ID" ]; then
+              echo "🛠️  Found failed CI run (${'$'}RUN_ID). Triggering rerun..."
+              gh run rerun "${'$'}RUN_ID" || echo "❌ Rerun trigger failed."
+            else
+              echo "✅ No failed CI runs found for this branch."
+            fi
+
+            # 3. Enable auto-merge if possible
+            if [ "${'$'}mergeable" = "MERGEABLE" ]; then
+              echo "🚀 Enabling auto-merge (squash)..."
+              gh pr merge "${'$'}pr" --auto --squash --delete-branch || echo "❌ Auto-merge enablement failed."
+            fi
+          done
+    """.trimIndent()
+    commandLine("bash", "-c", script)
+}
+
+tasks.register<Exec>("githubFixSecurity") {
+    group = "github"
+    description = "Checks and attempts to resolve all Dependabot, Security, and Scanning alerts."
+    dependsOn("githubSync")
+    val script = """
+        echo "🛡️  Checking for Dependabot Security Alerts..."
+        gh api repos/:owner/:repo/dependabot/alerts -f state=open --jq '.[] | "🚨 [Dependabot] \(.security_advisory.summary) (\(.dependency.package.name))"' || echo "No Dependabot alerts or error fetching."
+
+        echo "🔍 Checking for Code Scanning Alerts..."
+        gh api repos/:owner/:repo/code-scanning/alerts -f state=open --jq '.[] | "⚠️  [Scanning] \(.rule.description) in \(.most_recent_instance.location.path)"' || echo "No Scanning alerts or error fetching."
+
+        echo "------------------------------------------------------------"
+        echo "🚀 Triggering bulk merge for all available security fixes..."
+        # Filters for PRs that look like security fixes (Dependabot or chore: security)
+        gh pr list --state open --json number,title --template '{{range .}}{{.number}}{{"\t"}}{{.title}}{{"\n"}}{{end}}' | \
+          grep -E "dependabot|security|chore: automated sync" | \
+          while IFS=${'$'}'\t' read -r pr title; do
+            echo "Processing Security PR #${'$'}pr: ${'$'}title"
+            gh pr update-branch "${'$'}pr" 2>/dev/null || true
+            gh pr merge "${'$'}pr" --auto --squash --delete-branch || true
+          done
     """.trimIndent()
     commandLine("bash", "-c", script)
 }
