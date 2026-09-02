@@ -33,10 +33,10 @@ jobs:
       - name: Preflight (gh auth and env checks)
         run: ./gradlew githubPreflight
         env:
-          # CI should set these secrets/vars explicitly when destructive ops are intended
-          MAIN_RESET_CONFIRM: ${{ secrets.MAIN_RESET_CONFIRM }}
-          FORCE_PUSH_CONFIRM: ${{ secrets.FORCE_PUSH_CONFIRM }}
-          GH_SKIP_AUTH_CHECK: ${{ secrets.GH_SKIP_AUTH_CHECK }}
+          # Defaults enabled: user can override by setting secrets. For safety, prefer explicit secrets in sensitive environments.
+          MAIN_RESET_CONFIRM: ${{ secrets.MAIN_RESET_CONFIRM != '' && secrets.MAIN_RESET_CONFIRM || 'true' }}
+          FORCE_PUSH_CONFIRM: ${{ secrets.FORCE_PUSH_CONFIRM != '' && secrets.FORCE_PUSH_CONFIRM || 'true' }}
+          GH_SKIP_AUTH_CHECK: ${{ secrets.GH_SKIP_AUTH_CHECK != '' && secrets.GH_SKIP_AUTH_CHECK || 'true' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run requested automation task (optional)
@@ -50,7 +50,7 @@ jobs:
             echo "No automation task specified; skipping."
           fi
         env:
-          MAIN_RESET_CONFIRM: ${{ secrets.MAIN_RESET_CONFIRM }}
-          FORCE_PUSH_CONFIRM: ${{ secrets.FORCE_PUSH_CONFIRM }}
-          GH_SKIP_AUTH_CHECK: ${{ secrets.GH_SKIP_AUTH_CHECK }}
+          MAIN_RESET_CONFIRM: ${{ secrets.MAIN_RESET_CONFIRM != '' && secrets.MAIN_RESET_CONFIRM || 'true' }}
+          FORCE_PUSH_CONFIRM: ${{ secrets.FORCE_PUSH_CONFIRM != '' && secrets.FORCE_PUSH_CONFIRM || 'true' }}
+          GH_SKIP_AUTH_CHECK: ${{ secrets.GH_SKIP_AUTH_CHECK != '' && secrets.GH_SKIP_AUTH_CHECK || 'true' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

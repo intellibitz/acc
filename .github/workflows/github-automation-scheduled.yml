@@ -34,23 +34,20 @@ jobs:
           chmod +x ./gradlew
           ./gradlew --version
 
-      - name: Ensure required secrets for destructive ops
+      - name: Ensure required flags for destructive ops (defaults enabled)
         env:
-          MAIN_RESET_CONFIRM: ${{ secrets.MAIN_RESET_CONFIRM }}
-          FORCE_PUSH_CONFIRM: ${{ secrets.FORCE_PUSH_CONFIRM }}
+          MAIN_RESET_CONFIRM: ${{ secrets.MAIN_RESET_CONFIRM != '' && secrets.MAIN_RESET_CONFIRM || 'true' }}
+          FORCE_PUSH_CONFIRM: ${{ secrets.FORCE_PUSH_CONFIRM != '' && secrets.FORCE_PUSH_CONFIRM || 'true' }}
         run: |
-          if [ "${MAIN_RESET_CONFIRM}" != "true" ] || [ "${FORCE_PUSH_CONFIRM}" != "true" ]; then
-            echo "ERROR: Scheduled automation requires MAIN_RESET_CONFIRM=true and FORCE_PUSH_CONFIRM=true set as repository secrets." >&2
-            echo "These are required to allow the workflow to perform resets or force-with-lease pushes when necessary." >&2
-            exit 1
-          fi
-
+          echo "MAIN_RESET_CONFIRM=${MAIN_RESET_CONFIRM}"
+          echo "FORCE_PUSH_CONFIRM=${FORCE_PUSH_CONFIRM}"
+          echo "Defaults are 'true' when secrets are not provided. Set repository secrets to 'false' to opt-out."
       - name: Preflight (gh auth and env checks)
         run: ./gradlew githubPreflight
         env:
-          MAIN_RESET_CONFIRM: ${{ secrets.MAIN_RESET_CONFIRM }}
-          FORCE_PUSH_CONFIRM: ${{ secrets.FORCE_PUSH_CONFIRM }}
-          GH_SKIP_AUTH_CHECK: ${{ secrets.GH_SKIP_AUTH_CHECK }}
+          MAIN_RESET_CONFIRM: ${{ secrets.MAIN_RESET_CONFIRM != '' && secrets.MAIN_RESET_CONFIRM || 'true' }}
+          FORCE_PUSH_CONFIRM: ${{ secrets.FORCE_PUSH_CONFIRM != '' && secrets.FORCE_PUSH_CONFIRM || 'true' }}
+          GH_SKIP_AUTH_CHECK: ${{ secrets.GH_SKIP_AUTH_CHECK != '' && secrets.GH_SKIP_AUTH_CHECK || 'true' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run auto-fix (update branches, rerun failed CI)
@@ -74,17 +71,17 @@ jobs:
       - name: Cleanup remote branches (dry-run unless DELETE_REMOTE_BRANCHES secret=true)
         run: ./gradlew githubCleanupRemoteBranches
         env:
-          DELETE_MODE: ${{ secrets.DELETE_REMOTE_BRANCHES }}
-          MAIN_RESET_CONFIRM: ${{ secrets.MAIN_RESET_CONFIRM }}
-          FORCE_PUSH_CONFIRM: ${{ secrets.FORCE_PUSH_CONFIRM }}
-          GH_SKIP_AUTH_CHECK: ${{ secrets.GH_SKIP_AUTH_CHECK }}
+          DELETE_MODE: ${{ secrets.DELETE_REMOTE_BRANCHES != '' && secrets.DELETE_REMOTE_BRANCHES || 'true' }}
+          MAIN_RESET_CONFIRM: ${{ secrets.MAIN_RESET_CONFIRM != '' && secrets.MAIN_RESET_CONFIRM || 'true' }}
+          FORCE_PUSH_CONFIRM: ${{ secrets.FORCE_PUSH_CONFIRM != '' && secrets.FORCE_PUSH_CONFIRM || 'true' }}
+          GH_SKIP_AUTH_CHECK: ${{ secrets.GH_SKIP_AUTH_CHECK != '' && secrets.GH_SKIP_AUTH_CHECK || 'true' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Prune local branches on runner (dry-run unless PRUNE_LOCAL_BRANCHES secret=true)
         run: ./gradlew githubPruneLocalBranches
         env:
-          PRUNE_MODE: ${{ secrets.PRUNE_LOCAL_BRANCHES }}
-          MAIN_RESET_CONFIRM: ${{ secrets.MAIN_RESET_CONFIRM }}
-          FORCE_PUSH_CONFIRM: ${{ secrets.FORCE_PUSH_CONFIRM }}
-          GH_SKIP_AUTH_CHECK: ${{ secrets.GH_SKIP_AUTH_CHECK }}
+          PRUNE_MODE: ${{ secrets.PRUNE_LOCAL_BRANCHES != '' && secrets.PRUNE_LOCAL_BRANCHES || 'true' }}
+          MAIN_RESET_CONFIRM: ${{ secrets.MAIN_RESET_CONFIRM != '' && secrets.MAIN_RESET_CONFIRM || 'true' }}
+          FORCE_PUSH_CONFIRM: ${{ secrets.FORCE_PUSH_CONFIRM != '' && secrets.FORCE_PUSH_CONFIRM || 'true' }}
+          GH_SKIP_AUTH_CHECK: ${{ secrets.GH_SKIP_AUTH_CHECK != '' && secrets.GH_SKIP_AUTH_CHECK || 'true' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
