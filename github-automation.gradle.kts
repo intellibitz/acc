@@ -15,10 +15,46 @@ val gitHubCommonScript = """
      exit 1
     }
 
+    # Helper: confirm action via env var or interactive prompt.
+    # Usage: confirm_or_abort VAR_NAME "message"
+    confirm_or_abort() {
+      VAR_NAME="$1"; shift
+      MSG="$*"
+      VAL="${'$'}{!VAR_NAME:-}"
+      VAL_LOWER="${'$'}(printf '%s' "${'$'}VAL" | tr '[:upper:]' '[:lower:]')"
+      if [ "${'$'}VAL_LOWER" = "true" ]; then
+        return 0
+      fi
+      # If running interactively, ask the user; otherwise require explicit env flag
+      if [ -t 1 ]; then
+        read -r -p "${'$'}MSG [y/N]: " ans
+        case "${'$'}ans" in
+          [yY]) return 0 ;;
+          *) echo "Aborted by user."; exit 1 ;;
+        esac
+      else
+      echo "${'$'}MSG - set ${'$'}VAR_NAME env var to true to confirm (non-interactive)" >&2
+        exit 1
+      fi
+    }
+
     REMOTE_NAME="${'$'}(git remote | head -n 1 || true)"
     if [ -z "${'$'}REMOTE_NAME" ]; then
      echo "No git remote configured; operating in local-only mode."
     fi
+
+    # Ensure gh is authenticated when present. Use GH_SKIP_AUTH_CHECK=true to bypass in CI or special cases.
+    ensure_gh_authenticated() {
+      if ! command -v gh >/dev/null 2>&1; then
+        return 0
+      fi
+      if gh auth status >/dev/null 2>&1; then
+        return 0
+      fi
+      echo "GitHub CLI 'gh' is installed but not authenticated. Run 'gh auth login' or set GH_SKIP_AUTH_CHECK=true to bypass." >&2
+      # If interactive, allow the user to confirm proceeding without gh auth via prompt; else abort.
+      confirm_or_abort GH_SKIP_AUTH_CHECK "Proceed without gh authentication (remote operations may fail)?"
+    }
 
     BASE_BRANCH=""
     if command -v gh >/dev/null 2>&1 && [ -n "${'$'}REMOTE_NAME" ]; then
@@ -71,27 +107,10 @@ fun asGitHubScript(vararg parts: String): String = (listOf(gitHubCommonScript) +
 
 tasks.register("github") {
     group = "github"
-    description = "Runs the standard GitHub automation workflow: sync, ensure a PR, and watch checks."
-    dependsOn("githubSync", "githubPR", "githubChecks")
+    description = "Runs the creator workflow: sync latest main, update the current branch, merge clean PRs, and report state."
+    dependsOn("githubSync", "githubMergeAll", "githubStatus")
 }
 
-tasks.register<Exec>("githubStatus") {
-    group = "github"
-    description = "Displays the repo, current branch, default branch, and PR status when available."
-    commandLine("bash", "-c", asGitHubScript(
-        """
-            echo "Repository: ${'$'}(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-            echo "Current branch: ${'$'}CURRENT_BRANCH"
-            echo "Default branch: ${'$'}BASE_BRANCH"
-            echo "------------------------------------------------------------"
-            if command -v gh >/dev/null 2>&1; then
-              gh pr status || gh repo view --json nameWithOwner
-            else
-              git status --short --branch
-            fi
-        """.trimIndent()
-    ))
-}
 
 // GitHub sync / branch hygiene tasks
 
@@ -108,7 +127,45 @@ tasks.register<Exec>("githubSync") {
              git commit -m "chore: automated sync to GitHub" || true
            fi
 
+           ORIG_BRANCH="${'$'}CURRENT_BRANCH"
+           BASE_REF="${'$'}REMOTE_NAME/${'$'}BASE_BRANCH"
+
+           if [ -n "${'$'}REMOTE_NAME" ] && git rev-parse --verify "${'$'}BASE_REF" >/dev/null 2>&1; then
+             if [ "${'$'}CURRENT_BRANCH" != "${'$'}BASE_BRANCH" ]; then
+               echo "🔄 Updating local ${'$'}BASE_BRANCH from ${'$'}BASE_REF..."
+               git checkout "${'$'}BASE_BRANCH" >/dev/null 2>&1 || git switch "${'$'}BASE_BRANCH"
+               git fetch "${'$'}REMOTE_NAME" "${'$'}BASE_BRANCH"
+
+               uncommitted="${'$'}(git status --porcelain)"
+               counts="${'$'}(git rev-list --left-right --count "${'$'}BASE_BRANCH"..."${'$'}BASE_REF" 2>/dev/null || true)"
+               behind="${'$'}(echo ${'$'}counts | awk '{print $1}')"
+               ahead="${'$'}(echo ${'$'}counts | awk '{print $2}')"
+               if [ -n "${'$'}uncommitted" ] || { [ -n "${'$'}ahead" ] && [ "${'$'}ahead" -ne 0 ]; }; then
+                 echo "⚠️ Preparing to reset local ${'$'}BASE_BRANCH to ${'$'}BASE_REF which may discard local changes or ${'$'}ahead local commit(s)."
+                 confirm_or_abort MAIN_RESET_CONFIRM "Reset local ${'$'}BASE_BRANCH to ${'$'}REMOTE_NAME/${'$'}BASE_BRANCH?"
+               fi
+
+               git reset --hard "${'$'}BASE_REF"
+               echo "↩️  Returning to ${'$'}ORIG_BRANCH..."
+               git checkout "${'$'}ORIG_BRANCH" >/dev/null 2>&1 || git switch "${'$'}ORIG_BRANCH"
+             else
+               echo "🔄 Updating local ${'$'}BASE_BRANCH from ${'$'}BASE_REF..."
+               git fetch "${'$'}REMOTE_NAME" "${'$'}BASE_BRANCH"
+
+               uncommitted="${'$'}(git status --porcelain)"
+               if [ -n "${'$'}uncommitted" ]; then
+                 echo "⚠️ Local uncommitted changes present on ${'$'}BASE_BRANCH."
+                 confirm_or_abort MAIN_RESET_CONFIRM "This will discard local changes on ${'$'}BASE_BRANCH. Confirm reset to ${'$'}REMOTE_NAME/${'$'}BASE_BRANCH?"
+               fi
+
+               git reset --hard "${'$'}BASE_REF"
+             fi
+           else
+             echo "⚠️  Remote base branch unavailable; using local ${'$'}BASE_BRANCH as the current source of truth."
+           fi
+
            if [ "${'$'}CURRENT_BRANCH" = "${'$'}BASE_BRANCH" ]; then
+             echo "✅ Local base branch is up to date."
              if [ -n "${'$'}REMOTE_NAME" ]; then
                git fetch "${'$'}REMOTE_NAME" "${'$'}BASE_BRANCH" || true
                git reset --hard "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" 2>/dev/null || git reset --hard "${'$'}BASE_BRANCH"
@@ -118,15 +175,45 @@ tasks.register<Exec>("githubSync") {
              exit 0
            fi
 
-           if [ -n "${'$'}REMOTE_NAME" ] && git rev-parse --verify "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" >/dev/null 2>&1; then
-             echo "🌿 Rebasing ${'$'}CURRENT_BRANCH onto ${'$'}REMOTE_NAME/${'$'}BASE_BRANCH..."
-             git rebase "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" || { echo "❌ Rebase onto ${'$'}BASE_BRANCH failed. Resolve conflicts manually." >&2; exit 1; }
-           elif git show-ref --verify --quiet "refs/heads/${'$'}BASE_BRANCH"; then
-             echo "🌿 Rebasing ${'$'}CURRENT_BRANCH onto local ${'$'}BASE_BRANCH..."
-             git rebase "${'$'}BASE_BRANCH" || { echo "❌ Rebase onto ${'$'}BASE_BRANCH failed. Resolve conflicts manually." >&2; exit 1; }
+           REBASE_SKIP_PATTERN="${'$'}{REBASE_SKIP_PATTERN:-^(test/|automation/)}"
+           if echo "${'$'}CURRENT_BRANCH" | grep -E "${'$'}REBASE_SKIP_PATTERN" >/dev/null 2>&1; then
+             echo "⚠️ Skipping rebase for branch ${'$'}CURRENT_BRANCH (matches skip pattern ${'$'}REBASE_SKIP_PATTERN)"
+           else
+             if [ -n "${'$'}REMOTE_NAME" ] && git rev-parse --verify "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" >/dev/null 2>&1; then
+               echo "🌿 Rebasing ${'$'}CURRENT_BRANCH onto ${'$'}REMOTE_NAME/${'$'}BASE_BRANCH..."
+               if git rebase "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH"; then
+                 echo "✅ Rebase completed."
+               else
+                 echo "❌ Rebase failed for ${'$'}CURRENT_BRANCH. Aborting rebase and skipping rebase to avoid blocking automation." >&2
+                 git rebase --abort 2>/dev/null || true
+               fi
+             elif git show-ref --verify --quiet "refs/heads/${'$'}BASE_BRANCH"; then
+               echo "🌿 Rebasing ${'$'}CURRENT_BRANCH onto local ${'$'}BASE_BRANCH..."
+               if git rebase "${'$'}BASE_BRANCH"; then
+                 echo "✅ Rebase completed."
+               else
+                 echo "❌ Rebase failed for ${'$'}CURRENT_BRANCH. Aborting rebase and skipping rebase to avoid blocking automation." >&2
+                 git rebase --abort 2>/dev/null || true
+               fi
+             fi
            fi
 
            if [ -n "${'$'}REMOTE_NAME" ]; then
+             echo "🚀 Preparing to push ${'$'}CURRENT_BRANCH (safe push)..."
+             REMOTE_REF="${'$'}REMOTE_NAME/${'$'}CURRENT_BRANCH"
+             if git rev-parse --verify "${'$'}REMOTE_REF" >/dev/null 2>&1; then
+               remote_commit="${'$'}(git rev-parse "${'$'}REMOTE_REF")"
+               local_commit="${'$'}(git rev-parse HEAD)"
+               if [ "${'$'}remote_commit" != "${'$'}local_commit" ]; then
+                 echo "⚠️ Remote branch ${'$'}REMOTE_REF differs from local HEAD."
+                 confirm_or_abort FORCE_PUSH_CONFIRM "Remote branch ${'$'}REMOTE_REF will be updated with push --force-with-lease. Confirm?"
+                 git push -u "${'$'}REMOTE_NAME" HEAD --force-with-lease
+               else
+                 git push -u "${'$'}REMOTE_NAME" HEAD
+               fi
+             else
+               git push -u "${'$'}REMOTE_NAME" HEAD
+             fi
              git push -u "${'$'}REMOTE_NAME" HEAD || git push "${'$'}REMOTE_NAME" HEAD --force-with-lease
            fi
        """.trimIndent()
@@ -186,6 +273,31 @@ tasks.register<Exec>("githubMain") {
            if [ -n "${'$'}REMOTE_NAME" ] && git rev-parse --verify "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" >/dev/null 2>&1; then
              git switch "${'$'}BASE_BRANCH" 2>/dev/null || git checkout "${'$'}BASE_BRANCH"
              git fetch "${'$'}REMOTE_NAME" "${'$'}BASE_BRANCH"
+
+             uncommitted="${'$'}(git status --porcelain)"
+             if [ -n "${'$'}uncommitted" ]; then
+               echo "⚠️ Local uncommitted changes present on ${'$'}BASE_BRANCH."
+               confirm_or_abort MAIN_RESET_CONFIRM "This will discard local changes on ${'$'}BASE_BRANCH. Confirm reset to ${'$'}REMOTE_NAME/${'$'}BASE_BRANCH?"
+             fi
+
+             if git rev-parse --verify "${'$'}BASE_BRANCH" >/dev/null 2>&1 && git rev-parse --verify "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" >/dev/null 2>&1; then
+               counts="${'$'}(git rev-list --left-right --count "${'$'}BASE_BRANCH"..."${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" 2>/dev/null || true)"
+               behind="${'$'}(echo ${'$'}counts | awk '{print $1}')"
+               ahead="${'$'}(echo ${'$'}counts | awk '{print $2}')"
+               if [ -n "${'$'}ahead" ] && [ "${'$'}ahead" -ne 0 ]; then
+                 echo "⚠️ Local ${'$'}BASE_BRANCH is ahead by ${'$'}ahead commit(s) and will be lost."
+                 confirm_or_abort MAIN_RESET_CONFIRM "Reset will drop ${'$'}ahead local commit(s) on ${'$'}BASE_BRANCH. Confirm?"
+               fi
+             fi
+
+             git reset --hard "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH"
+           else
+             git switch "${'$'}BASE_BRANCH" 2>/dev/null || git checkout "${'$'}BASE_BRANCH"
+             uncommitted="${'$'}(git status --porcelain)"
+             if [ -n "${'$'}uncommitted" ]; then
+               echo "⚠️ Local uncommitted changes present on ${'$'}BASE_BRANCH."
+               confirm_or_abort MAIN_RESET_CONFIRM "This will discard local changes on ${'$'}BASE_BRANCH. Confirm reset to local ${'$'}BASE_BRANCH?"
+             fi
              git reset --hard "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH"
            else
              git switch "${'$'}BASE_BRANCH" 2>/dev/null || git checkout "${'$'}BASE_BRANCH"
@@ -193,6 +305,104 @@ tasks.register<Exec>("githubMain") {
            fi
        """.trimIndent()
     ))
+}
+
+// Cleanup tasks: remote and local branch pruning
+
+val pruneLocalDefault = project.findProperty("pruneLocalBranches")?.toString()?.equals("true", ignoreCase = true) ?: false
+val deleteRemoteDefault = project.findProperty("deleteClosedPrBranches")?.toString()?.equals("true", ignoreCase = true) ?: false
+
+// Deletes remote branches for merged/closed PRs. Dry-run by default; set -PdeleteClosedPrBranches=true or env DELETE_REMOTE=true to actually delete.
+tasks.register<Exec>("githubCleanupRemoteBranches") {
+    group = "github"
+    description = "Lists merged/closed PR branches and optionally deletes remote refs. Safe by default."
+    commandLine("bash", "-c", asGitHubScript(
+        """
+            if ! command -v gh >/dev/null 2>&1; then
+              echo "GitHub CLI is not installed; skipping remote branch cleanup."
+              exit 0
+            fi
+
+            DELETE_MODE="${'$'}{DELETE_MODE:-${if (deleteRemoteDefault) "true" else "false"}}"
+            echo "🧹 Remote branch cleanup preview (DELETE_MODE=${'$'}DELETE_MODE)."
+
+            gh pr list --state merged --limit 500 --json number,headRefName,baseRefName --template \
+              '{{range .}}{{.number}}{{"\t"}}{{.headRefName}}{{"\t"}}{{.baseRefName}}{{"\n"}}{{end}}' | \
+              while IFS=${'$'}'\t' read -r pr branch base; do
+                if [ -z "${'$'}branch" ] || [ "${'$'}branch" = "${'$'}BASE_BRANCH" ]; then
+                  continue
+                fi
+                echo "Merged PR #${'$'}pr: ${'$'}branch -> ${'$'}base"
+                if [ "${'$'}DELETE_MODE" = "true" ]; then
+                  echo "Deleting remote branch ${'$'}branch..."
+                  gh api -X DELETE "repos/:owner/:repo/git/refs/heads/${'$'}branch" || echo "Failed to delete ${'$'}branch or branch protected."
+                else
+                  echo "[DRY-RUN] would delete remote branch: ${'$'}branch"
+                fi
+              done
+
+            gh pr list --state closed --limit 500 --json number,headRefName,baseRefName --template \
+              '{{range .}}{{.number}}{{"\t"}}{{.headRefName}}{{"\t"}}{{.baseRefName}}{{"\n"}}{{end}}' | \
+              while IFS=${'$'}'\t' read -r pr branch base; do
+                if [ -z "${'$'}branch" ] || [ "${'$'}branch" = "${'$'}BASE_BRANCH" ]; then
+                  continue
+                fi
+                echo "Closed PR #${'$'}pr: ${'$'}branch -> ${'$'}base"
+                if [ "${'$'}DELETE_MODE" = "true" ]; then
+                  echo "Deleting remote branch ${'$'}branch..."
+                  gh api -X DELETE "repos/:owner/:repo/git/refs/heads/${'$'}branch" || echo "Failed to delete ${'$'}branch or branch protected."
+                else
+                  echo "[DRY-RUN] would delete remote branch: ${'$'}branch"
+                fi
+              done
+        """.trimIndent()
+    ))
+    environment("DELETE_MODE", if (deleteRemoteDefault) "true" else "false")
+}
+
+// Deletes local branches that have no upstream, whose upstream was deleted, or that have been merged into the base branch.
+// Dry-run by default; set -PpruneLocalBranches=true or environment PRUNE_LOCAL=true to actually delete.
+tasks.register<Exec>("githubPruneLocalBranches") {
+    group = "github"
+    description = "Prunes local branches that are merged into base or whose remote was removed. Dry-run by default."
+    commandLine("bash", "-c", asGitHubScript(
+        """
+            PRUNE_MODE="${'$'}{PRUNE_MODE:-${if (pruneLocalDefault) "true" else "false"}}"
+            echo "Local prune preview (PRUNE_MODE=${'$'}PRUNE_MODE)."
+
+            git fetch --prune || true
+
+            git for-each-ref --format='%(refname:short) %(upstream:short)' refs/heads | while read -r local upstream; do
+              # skip current and base
+              if [ "${'$'}local" = "${'$'}CURRENT_BRANCH" ] || [ "${'$'}local" = "${'$'}BASE_BRANCH" ]; then
+                continue
+              fi
+
+              if [ -z "${'$'}upstream" ]; then
+                echo "[DRY-RUN] local branch ${'$'}local has no upstream"
+                if [ "${'$'}PRUNE_MODE" = "true" ]; then
+                  echo "Deleting local branch ${'$'}local"
+                  git branch -D "${'$'}local" || git branch -d "${'$'}local"
+                fi
+                continue
+              fi
+
+              # if upstream missing on remote
+              if ! git ls-remote --exit-code --heads "${'$'}REMOTE_NAME" "${'$'}local" >/dev/null 2>&1; then
+                echo "[DRY-RUN] remote branch for ${'$'}local missing"
+                if [ "${'$'}PRUNE_MODE" = "true" ]; then git branch -D "${'$'}local" || git branch -d "${'$'}local"; fi
+                continue
+              fi
+
+              # if local branch merged into remote/base
+              if git merge-base --is-ancestor "${'$'}local" "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" 2>/dev/null; then
+                echo "[DRY-RUN] local branch ${'$'}local is merged into ${'$'}BASE_BRANCH"
+                if [ "${'$'}PRUNE_MODE" = "true" ]; then git branch -D "${'$'}local" || git branch -d "${'$'}local"; fi
+              fi
+            done
+        """.trimIndent()
+    ))
+    environment("PRUNE_MODE", if (pruneLocalDefault) "true" else "false")
 }
 
 tasks.register<Exec>("githubPR") {
@@ -235,6 +445,7 @@ tasks.register<Exec>("githubMerge") {
 
 tasks.register<Exec>("githubMergeAll") {
     group = "github"
+    description = "Updates all open PR branches to the latest base and auto-merges all clean, mergeable pull requests."
     description = "Updates and enables auto-merge for all open pull requests across the repo."
     dependsOn("githubSync")
     commandLine("bash", "-c", asGitHubScript(
@@ -244,6 +455,35 @@ tasks.register<Exec>("githubMergeAll") {
              exit 0
            fi
 
+           gh pr list --state open --json number,title,mergeable,mergeStateStatus,headRefName --template \
+             '{{range .}}{{.number}}{{"\t"}}{{.mergeable}}{{"\t"}}{{.mergeStateStatus}}{{"\t"}}{{.headRefName}}{{"\t"}}{{.title}}{{"\n"}}{{end}}' | \
+             while IFS=${'$'}'\t' read -r pr mergeable status branch title; do
+               echo "------------------------------------------------------------"
+               echo "PR #${'$'}pr: ${'$'}title"
+
+               if [ -z "${'$'}branch" ]; then
+                 continue
+               fi
+
+               if [ "${'$'}mergeable" = "CONFLICTING" ] || [ "${'$'}mergeable" = "DRAFT" ]; then
+                 echo "⚠️  Skipping: PR is conflicted or draft."
+                 continue
+               fi
+
+               echo "🔄 Ensuring branch is up-to-date with ${'$'}BASE_BRANCH..."
+               gh pr update-branch "${'$'}pr" || echo "❌ Update failed (will continue to next checks)."
+
+               # Refresh PR metadata after attempted update
+               pr_info="${'$'}(gh pr view "${'$'}pr" --json mergeable,mergeStateStatus -q '. | [.mergeable, .mergeStateStatus] | @tsv' 2>/dev/null || true)"
+               mergeable2="${'$'}(echo "${'$'}pr_info" | cut -f1)"
+               status2="${'$'}(echo "${'$'}pr_info" | cut -f2)"
+
+               if [ "${'$'}mergeable2" = "MERGEABLE" ] || [ "${'$'}status2" = "CLEAN" ] || [ "${'$'}status2" = "HAS_HOOKS" ]; then
+                 echo "🚀 Enabling auto-merge..."
+                 gh pr merge "${'$'}pr" --auto --squash --delete-branch || echo "❌ Merge failed."
+               else
+                 echo "⏭️  Skipping: PR is not yet mergeable after update."
+               fi
            gh pr list --state open --json number,title,mergeable,mergeStateStatus --template \
              '{{range .}}{{.number}}{{"\t"}}{{.mergeable}}{{"\t"}}{{.mergeStateStatus}}{{"\t"}}{{.title}}{{"\n"}}{{end}}' | \
              while IFS=${'$'}'\t' read -r pr mergeable status title; do
@@ -375,6 +615,10 @@ tasks.register<Exec>("githubFixAll") {
                echo "------------------------------------------------------------"
                echo "PR #${'$'}pr: ${'$'}title"
 
+               if [ "${'$'}mergeable" = "CONFLICTING" ] || [ "${'$'}mergeable" = "DRAFT" ]; then
+                 echo "⚠️  Skipping update: PR is conflicted or draft."
+               else
+                 echo "🔄 Ensuring branch ${'$'}branch is up-to-date with ${'$'}BASE_BRANCH..."
                if [ "${'$'}status" = "BEHIND" ]; then
                  echo "🔄 Branch is out-of-date. Updating with the default branch..."
                  gh pr update-branch "${'$'}pr" || echo "❌ Automatic update failed."
@@ -431,6 +675,50 @@ tasks.register<Exec>("githubSetup") {
     group = "github"
     description = "Optimizes the repository settings for GitHub automation workflows."
     commandLine("gh", "repo", "edit", "--enable-auto-merge", "--delete-branch-on-merge", "--allow-update-branch", "--enable-squash-merge")
+}
+
+// Pre-flight check for CI and local runs: verifies gh auth (unless skipped) and required env vars
+tasks.register<Exec>("githubPreflight") {
+    group = "github"
+    description = "Performs pre-flight checks: gh auth, and required env var checklist for destructive ops."
+    commandLine("bash", "-c", asGitHubScript(
+       """
+           # ensure gh is authenticated (or confirm to proceed)
+           ensure_gh_authenticated || true
+
+           echo "============================================================"
+           echo "GitHub Automation Preflight"
+           echo "Repository: ${'$'}(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+           echo "Default branch: ${'$'}BASE_BRANCH"
+           echo "Current branch: ${'$'}CURRENT_BRANCH"
+           echo "------------------------------------------------------------"
+
+           if command -v gh >/dev/null 2>&1; then
+             if gh auth status >/dev/null 2>&1; then
+               echo "- gh installed: yes"
+               echo "- gh authenticated: yes"
+             else
+               echo "- gh installed: yes"
+               echo "- gh authenticated: NO"
+               echo "  Set GH_SKIP_AUTH_CHECK=true to bypass (not recommended); or run 'gh auth login'."
+             fi
+           else
+             echo "- gh installed: NO"
+           fi
+
+           echo "- MAIN_RESET_CONFIRM=${'$'}{MAIN_RESET_CONFIRM:-false}"
+           echo "- FORCE_PUSH_CONFIRM=${'$'}{FORCE_PUSH_CONFIRM:-false}"
+           echo "- GH_SKIP_AUTH_CHECK=${'$'}{GH_SKIP_AUTH_CHECK:-false}"
+
+           # Fail fast for CI safety if gh exists but unauthenticated and skip not set
+           if command -v gh >/dev/null 2>&1 && ! gh auth status >/dev/null 2>&1 && [ "${'$'}{GH_SKIP_AUTH_CHECK:-}" != "true" ]; then
+             echo "ERROR: gh is installed but unauthenticated. Abort preflight (set GH_SKIP_AUTH_CHECK=true to bypass)." >&2
+             exit 1
+           fi
+
+           echo "Preflight checks passed (or user confirmed)."
+       """.trimIndent()
+    ))
 }
 
 tasks.register<Exec>("githubChecks") {
