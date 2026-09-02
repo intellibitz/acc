@@ -264,6 +264,56 @@ tasks.register<Exec>("githubMergeAll") {
     ))
 }
 
+val deleteClosedPrBranches = project.findProperty("deleteClosedPrBranches")?.toString()?.equals("true", ignoreCase = true) ?: false
+
+tasks.register<Exec>("githubCleanupClosedPRs") {
+    group = "github"
+    description = "Lists merged/closed PRs and optionally deletes stale branch refs that are no longer needed. Safe by default; set -PdeleteClosedPrBranches=true to actually delete remote branches."
+    commandLine("bash", "-c", asGitHubScript(
+       """
+           if ! command -v gh >/dev/null 2>&1; then
+             echo "GitHub CLI is not installed; skipping closed PR cleanup."
+             exit 0
+           fi
+
+           DELETE_MODE="${'$'}{DELETE_MODE:-${if (deleteClosedPrBranches) "true" else "false"}}"
+           echo "🧹 Closed PR cleanup preview (dry-run mode by default)."
+           echo "Delete mode: ${'$'}DELETE_MODE"
+
+           gh pr list --state merged --limit 200 --json number,title,headRefName,baseRefName --template \
+             '{{range .}}{{.number}}{{"\t"}}{{.headRefName}}{{"\t"}}{{.baseRefName}}{{"\t"}}{{.title}}{{"\n"}}{{end}}' | \
+             while IFS=${'$'}'\t' read -r pr branch base title; do
+               if [ -z "${'$'}branch" ] || [ "${'$'}branch" = "${'$'}BASE_BRANCH" ]; then
+                 continue
+               fi
+               echo "Merged PR #${'$'}pr: ${'$'}branch -> ${'$'}base (${'$'}title)"
+               if [ "${'$'}DELETE_MODE" = "true" ]; then
+                 echo "Deleting stale branch ref for ${'$'}branch..."
+                 gh api -X DELETE "repos/:owner/:repo/git/refs/heads/${'$'}branch" || echo "Branch already deleted or protected."
+               else
+                 echo "[DRY-RUN] would delete remote branch: ${'$'}branch"
+               fi
+             done
+
+           gh pr list --state closed --limit 200 --json number,title,headRefName,baseRefName --template \
+             '{{range .}}{{.number}}{{"\t"}}{{.headRefName}}{{"\t"}}{{.baseRefName}}{{"\t"}}{{.title}}{{"\n"}}{{end}}' | \
+             while IFS=${'$'}'\t' read -r pr branch base title; do
+               if [ -z "${'$'}branch" ] || [ "${'$'}branch" = "${'$'}BASE_BRANCH" ]; then
+                 continue
+               fi
+               echo "Closed PR #${'$'}pr: ${'$'}branch -> ${'$'}base (${'$'}title)"
+               if [ "${'$'}DELETE_MODE" = "true" ]; then
+                 echo "Deleting stale branch ref for ${'$'}branch..."
+                 gh api -X DELETE "repos/:owner/:repo/git/refs/heads/${'$'}branch" || echo "Branch already deleted or protected."
+               else
+                 echo "[DRY-RUN] would delete remote branch: ${'$'}branch"
+               fi
+             done
+       """.trimIndent()
+    ))
+    environment("DELETE_MODE", if (deleteClosedPrBranches) "true" else "false")
+}
+
 tasks.register<Exec>("githubFixAll") {
     group = "github"
     description = "Attempts to fix all open PRs by updating them and rerunning failed workflow runs."
