@@ -6,14 +6,14 @@
 
 tasks.register("github") {
     group = "github"
-    description = "Runs the creator workflow: sync latest main, update current branch, merge clean PRs, and report state."
-    dependsOn("githubSyncKotlin", "githubMergeAllKotlin", "githubPRSummaryKotlin")
+    description = "Runs the creator workflow: sync latest main, update current branch, merge clean PRs, prune merged remote & local branches, and report state."
+    dependsOn("githubSyncKotlin", "githubMergeAllKotlin", "githubCleanupRemoteBranchesKotlin", "githubPruneLocalBranchesKotlin", "githubPRSummaryKotlin")
 }
 
 tasks.register("githubSync") {
     group = "github"
-    description = "Smart sync (Kotlin-native)"
-    dependsOn("githubSyncKotlin")
+    description = "Smart sync (Kotlin-native): updates main, rebases current branch, and prunes local merged branches."
+    dependsOn("githubSyncKotlin", "githubPruneLocalBranchesKotlin")
 }
 
 tasks.register("githubOpen") {
@@ -36,13 +36,13 @@ tasks.register("githubMain") {
 
 tasks.register("githubCleanupRemoteBranches") {
     group = "github"
-    description = "Cleanup remote branches (Kotlin-native)"
+    description = "Cleanup remote branches for merged PRs (Kotlin-native)"
     dependsOn("githubCleanupRemoteBranchesKotlin")
 }
 
 tasks.register("githubPruneLocalBranches") {
     group = "github"
-    description = "Prune local branches (Kotlin-native)"
+    description = "Prune local branches merged into main or missing remote (Kotlin-native)"
     dependsOn("githubPruneLocalBranchesKotlin")
 }
 
@@ -54,19 +54,19 @@ tasks.register("githubPR") {
 
 tasks.register("githubMerge") {
     group = "github"
-    description = "Merge current branch PR (Kotlin-native)"
-    dependsOn("githubPRKotlin", "githubMergeKotlin")
+    description = "Merge current branch PR and cleanup branches (Kotlin-native)"
+    dependsOn("githubPRKotlin", "githubMergeKotlin", "githubCleanupRemoteBranchesKotlin", "githubPruneLocalBranchesKotlin")
 }
 
 tasks.register("githubMergeAll") {
     group = "github"
-    description = "Updates and enables auto-merge for all open pull requests across the repo (Kotlin-native)"
-    dependsOn("githubSyncKotlin", "githubMergeAllKotlin")
+    description = "Updates, auto-merges all open pull requests, and cleans up remote/local merged branches (Kotlin-native)"
+    dependsOn("githubSyncKotlin", "githubMergeAllKotlin", "githubCleanupRemoteBranchesKotlin", "githubPruneLocalBranchesKotlin")
 }
 
 tasks.register("githubCleanupClosedPRs") {
     group = "github"
-    description = "Lists merged/closed PRs and deletes stale branch refs when requested (Kotlin-native)"
+    description = "Lists merged/closed PRs and deletes stale remote branch refs (Kotlin-native)"
     dependsOn("githubCleanupRemoteBranchesKotlin")
 }
 

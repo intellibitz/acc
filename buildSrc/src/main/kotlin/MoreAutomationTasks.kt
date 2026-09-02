@@ -84,52 +84,114 @@ open class SyncTask : BaseGitHubTask() {
         if (rc != 0) { logger.warn("Checkout failed: ${out}"); return }
         val (rc2, out2) = runCmd("git", "pull", "origin", base, workingDir = repoDir)
         if (rc2 == 0) logger.lifecycle("Updated local ${base} from origin/${base}") else logger.warn("Pull failed: ${out2}")
+
+        // Automatically prune local branches merged into base after sync
+        runCmd("git", "fetch", "origin", "--prune", workingDir = repoDir)
+        val (bRc, bOut) = runCmd("git", "for-each-ref", "--format=%(refname:short)", "refs/heads/", workingDir = repoDir)
+        if (bRc == 0) {
+            bOut.lines().forEach { branch ->
+                val b = branch.trim()
+                if (b.isBlank() || b == base || b == "main" || b == "master") return@forEach
+                val (mRc, _) = runCmd("git", "merge-base", "--is-ancestor", b, "origin/$base", workingDir = repoDir)
+                if (mRc == 0) {
+                    logger.lifecycle("Auto-pruning merged local branch '$b'")
+                    runCmd("git", "branch", "-D", b, workingDir = repoDir)
+                }
+            }
+        }
     }
 }
 
 open class CleanupRemoteBranchesTask : BaseGitHubTask() {
+    @get:Input
+    val deleteModeInput: Boolean = (project.findProperty("DELETE_MODE") as? String)?.toBoolean()
+        ?: (project.findProperty("deleteClosedPrBranches") as? String)?.toBoolean()
+        ?: (System.getenv("DELETE_MODE")?.toBoolean() ?: true)
+
     @TaskAction
     fun run() {
         val repo = repoFull()
-        logger.lifecycle("Invoking remote branch cleanup for ${repo} (dry-run unless REMOVE_MODE=true)")
-        val (rc, out) = runCmd("gh", "api", "repos/:owner/:repo/branches", "-H", "Accept: application/vnd.github+json", "-F", "repo=${repo}")
-        if (rc != 0) logger.warn("Failed to list branches: ${out}") else logger.lifecycle("Retrieved branches metadata (see logs for details).")
+        val base = if (baseBranchInput.isNotBlank()) baseBranchInput else "main"
+        val current = currentBranchInput
+        logger.lifecycle("Cleaning up merged remote branches for repository $repo (deleteMode=$deleteModeInput)...")
+
+        val (rc, out) = runCmd("gh", "pr", "list", "--state", "merged", "--repo", repo, "--limit", "500", "--json", "number,headRefName", "-q", ".[] | [.number, .headRefName] | @tsv")
+        if (rc != 0) {
+            logger.warn("Failed to list merged PRs: $out")
+            return
+        }
+
+        val deleted = mutableSetOf<String>()
+        out.lines().forEach { line ->
+            if (line.isBlank()) return@forEach
+            val parts = line.split('\t')
+            val pr = parts.getOrNull(0) ?: return@forEach
+            val branch = parts.getOrNull(1) ?: return@forEach
+            if (branch.isBlank() || branch == base || branch == current || branch == "main" || branch == "master") return@forEach
+            if (deleted.contains(branch)) return@forEach
+
+            logger.lifecycle("Merged PR #$pr branch '$branch' detected for remote cleanup.")
+            if (deleteModeInput) {
+                val (dRc, dOut) = runCmd("gh", "api", "-X", "DELETE", "repos/$repo/git/refs/heads/$branch")
+                if (dRc == 0) {
+                    logger.lifecycle("Successfully deleted remote branch '$branch'")
+                    deleted.add(branch)
+                } else {
+                    logger.lifecycle("Remote branch '$branch' already deleted or protected: $dOut")
+                }
+            } else {
+                logger.lifecycle("[DRY-RUN] Would delete remote branch '$branch'")
+            }
+        }
     }
 }
 
-open class PruneLocalBranchesTask : DefaultTask() {
-    @get:Internal
-    val rootDir: File = project.rootDir
-
+open class PruneLocalBranchesTask : BaseGitHubTask() {
     @get:Input
-    val pruneModeInput: Boolean = (project.findProperty("PRUNE_LOCAL_MODE") as? String)?.toBoolean() ?: (System.getenv("PRUNE_LOCAL_MODE")?.toBoolean() ?: false)
-
-    @get:Input
-    val pruneDaysInput: Long = (project.findProperty("PRUNE_LOCAL_DAYS") as? String)?.toLong() ?: (System.getenv("PRUNE_LOCAL_DAYS")?.toLong() ?: 90L)
+    val pruneModeInput: Boolean = (project.findProperty("PRUNE_MODE") as? String)?.toBoolean()
+        ?: (project.findProperty("pruneLocalBranches") as? String)?.toBoolean()
+        ?: (System.getenv("PRUNE_MODE")?.toBoolean() ?: true)
 
     @TaskAction
     fun run() {
         val repoDir = rootDir
-        val cutoff = Instant.now().minus(pruneDaysInput, ChronoUnit.DAYS)
-        logger.lifecycle("Pruning local branches older than ${pruneDaysInput} days. Dry-run=${!pruneModeInput}")
-        val (rc, out) = runCmd("git", "for-each-ref", "--format=%(refname:short) %(committerdate:iso8601)", "refs/heads/", workingDir = repoDir)
-        if (rc != 0) { logger.warn("Failed to enumerate local branches: ${out}"); return }
-        out.lines().forEach { line ->
-            if (line.isBlank()) return@forEach
-            val parts = line.split(" ", limit = 2)
-            if (parts.size < 2) return@forEach
-            val name = parts[0]
-            val dateStr = parts[1]
-            try {
-                val date = Instant.parse(dateStr)
-                if (date.isBefore(cutoff)) {
-                    logger.lifecycle("Local branch ${name} last commit ${date} older than ${pruneDaysInput} days; eligible for deletion.")
-                    if (pruneModeInput) {
-                        val (rcd, od) = runCmd("git", "branch", "-D", name, workingDir = repoDir)
-                        if (rcd == 0) logger.lifecycle("Deleted local branch ${name}") else logger.warn("Failed delete ${name}: ${od}")
+        val base = if (baseBranchInput.isNotBlank()) baseBranchInput else "main"
+        val (cRc, cOut) = runCmd("git", "rev-parse", "--abbrev-ref", "HEAD", workingDir = repoDir)
+        val currentBranch = if (cRc == 0) cOut.trim() else ""
+
+        logger.lifecycle("Pruning local merged/stale branches (pruneMode=$pruneModeInput)...")
+        runCmd("git", "fetch", "origin", "--prune", workingDir = repoDir)
+
+        val (rc, out) = runCmd("git", "for-each-ref", "--format=%(refname:short)", "refs/heads/", workingDir = repoDir)
+        if (rc != 0) {
+            logger.warn("Failed to enumerate local branches: $out")
+            return
+        }
+
+        out.lines().forEach { branch ->
+            val b = branch.trim()
+            if (b.isBlank() || b == base || b == currentBranch || b == "main" || b == "master") return@forEach
+
+            val (mRc, _) = runCmd("git", "merge-base", "--is-ancestor", b, "origin/$base", workingDir = repoDir)
+            val isMerged = mRc == 0
+
+            val (rRc, rOut) = runCmd("git", "ls-remote", "--exit-code", "--heads", "origin", b, workingDir = repoDir)
+            val remoteMissing = rRc != 0 || rOut.isBlank()
+
+            if (isMerged || remoteMissing) {
+                val reason = if (isMerged) "merged into $base" else "remote branch missing on origin"
+                logger.lifecycle("Local branch '$b' is eligible for deletion ($reason).")
+                if (pruneModeInput) {
+                    val (dRc, dOut) = runCmd("git", "branch", "-D", b, workingDir = repoDir)
+                    if (dRc == 0) {
+                        logger.lifecycle("Successfully deleted local branch '$b'")
+                    } else {
+                        logger.warn("Failed to delete local branch '$b': $dOut")
                     }
+                } else {
+                    logger.lifecycle("[DRY-RUN] Would delete local branch '$b'")
                 }
-            } catch (_: Exception) {}
+            }
         }
     }
 }
