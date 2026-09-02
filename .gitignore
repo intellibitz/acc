@@ -69,3 +69,4 @@ config/private_fleet.conf
 /test/
 /frontend/*/build/
 /gateway/build/
+gradle.properties
