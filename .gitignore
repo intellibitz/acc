@@ -69,3 +69,34 @@ config/private_fleet.conf
 /test/
 /frontend/*/build/
 /gateway/build/
+gradle.properties
+
+# Local and user-specific configuration
+# Local gradle properties (do NOT commit secrets)
+gradle-local.properties
+*.local.properties
+local.properties
+
+# Environment files containing secrets
+.env
+.env.*
+.env.local
+
+# Editor / IDE
+.vscode/
+*.sublime-workspace
+*.sublime-project
+
+# Keystores, certificates and keys
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.crt
+*.key
+
+# Swap / temp files
+*.swp
+*.swo
+

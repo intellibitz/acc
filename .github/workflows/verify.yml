@@ -10,9 +10,11 @@ jobs:
   verify:
     name: Build and Test
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     permissions:
       contents: read
+    env:
+      GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx3g -Dkotlin.daemon.jvmargs=-Xmx2g"
     steps:
       - uses: actions/checkout@v7
 

@@ -25,7 +25,14 @@ Notes
 - GitHub CLI (gh) authentication:
   - The script checks for 'gh' being installed and (when present) verifies 'gh auth status'. If 'gh' is installed but not authenticated, the script will abort unless GH_SKIP_AUTH_CHECK=true is set in the environment.
   - For interactive local runs, the script will prompt to proceed without authentication (not recommended).
-  - For CI, authenticate 'gh' via a GITHUB_TOKEN or use 'gh auth login --with-token' in the runner; alternatively, set GH_SKIP_AUTH_CHECK=true to bypass the check (not recommended).
+  - Token lookup (first match wins): project properties (-P or gradle.properties) keys [GITHUB_TOKEN, githubToken, github.token, GH_TOKEN, ghToken]; env vars GITHUB_TOKEN / GH_TOKEN; then ~/.gradle/gradle.properties.
+  - For CI, store the Personal Access Token (PAT) as a repository secret (recommended name: ACC_GITHUB_TOKEN or GITHUB_TOKEN) and inject it into the runner as GITHUB_TOKEN. Example step:
+
+    env:
+      GITHUB_TOKEN: ${{ secrets.ACC_GITHUB_TOKEN }}
+
+    (Avoid committing gradle.properties containing secrets; use ~/.gradle/gradle.properties for local-only tokens and .gitignore prevents accidental commits.)
+  - Alternatively, authenticate 'gh' in the runner with 'gh auth login --with-token' using the secret; do NOT print tokens to logs.
 
 - CI safety recommendations:
   - Non-interactive runs must explicitly allow destructive actions by setting MAIN_RESET_CONFIRM=true and FORCE_PUSH_CONFIRM=true.

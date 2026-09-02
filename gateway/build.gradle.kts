@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "cc.thevar.acc"
-version = project.property("appVersion") as String
+version = (project.findProperty("appVersion") as? String) ?: "1.0.0"
 
 val mainClassName = "cc.thevar.acc.ApplicationKt"
 

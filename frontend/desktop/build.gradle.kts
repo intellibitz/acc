@@ -22,7 +22,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "cc.thevar.acc"
-            packageVersion = project.property("appVersion") as String
+            packageVersion = (project.findProperty("appVersion") as? String) ?: "1.0.0"
         }
     }
 }

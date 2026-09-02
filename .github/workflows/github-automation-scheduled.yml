@@ -79,7 +79,7 @@ jobs:
 
       - name: Remove obsolete branches (auto)
         if: ${{ github.event.inputs.run_tasks == 'all' || github.event.inputs.run_tasks == 'merge' }}
-        run: ./gradlew githubRemoveObsoleteBranches
+        run: ./gradlew githubRemoveObsoleteBranchesKotlin
         env:
           REMOVE_MODE: ${{ secrets.REMOVE_MODE != '' && secrets.REMOVE_MODE || 'true' }}
           REMOVE_DAYS: ${{ secrets.REMOVE_DAYS != '' && secrets.REMOVE_DAYS || '90' }}
@@ -100,7 +100,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Prune local branches on runner (dry-run unless PRUNE_LOCAL_BRANCHES secret=true)
-        run: ./gradlew githubRemoveLocalObsoleteBranches
+        run: ./gradlew githubRemoveLocalObsoleteBranchesKotlin
         env:
           PRUNE_LOCAL_MODE: ${{ secrets.PRUNE_LOCAL_BRANCHES != '' && secrets.PRUNE_LOCAL_BRANCHES || 'true' }}
           PRUNE_LOCAL_DAYS: ${{ secrets.PRUNE_LOCAL_DAYS != '' && secrets.PRUNE_LOCAL_DAYS || '90' }}
