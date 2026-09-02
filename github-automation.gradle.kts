@@ -314,6 +314,50 @@ tasks.register<Exec>("githubCleanupClosedPRs") {
     environment("DELETE_MODE", if (deleteClosedPrBranches) "true" else "false")
 }
 
+tasks.register<Exec>("githubPRSummary") {
+    group = "github"
+    description = "Prints a safe PR summary: open PRs, merged PRs, stale branches, and recommended next actions."
+    commandLine("bash", "-c", asGitHubScript(
+       """
+           if ! command -v gh >/dev/null 2>&1; then
+             echo "GitHub CLI is not installed; skipping PR summary."
+             exit 0
+           fi
+
+           echo "============================================================"
+           echo "GitHub PR Summary"
+           echo "Current branch: ${'$'}CURRENT_BRANCH"
+           echo "Default branch: ${'$'}BASE_BRANCH"
+           echo "============================================================"
+
+           echo "[Open PRs]"
+           gh pr list --state open --limit 50 --json number,title,headRefName,mergeable,mergeStateStatus --template '{{range .}}{{.number}}{{"\t"}}{{.title}}{{"\t"}}{{.headRefName}}{{"\t"}}{{.mergeable}}{{"\t"}}{{.mergeStateStatus}}{{"\n"}}{{end}}' || echo "No open PRs."
+
+           echo ""
+           echo "[Merged PRs]"
+           gh pr list --state merged --limit 50 --json number,title,headRefName --template '{{range .}}{{.number}}{{"\t"}}{{.title}}{{"\t"}}{{.headRefName}}{{"\n"}}{{end}}' || echo "No merged PRs."
+
+           echo ""
+           echo "[Stale branch refs]"
+           gh pr list --state merged --limit 200 --json number,headRefName --template '{{range .}}{{.headRefName}}{{"\n"}}{{end}}' | \
+             awk 'NF && $0 != "${'$'}BASE_BRANCH" {print}' | \
+             sort -u | sed 's/^/[DRY-RUN] stale branch: /' || echo "No stale merged-PR branches detected."
+
+           echo ""
+           echo "[Recommended actions]"
+           echo "- Review open PRs with mergeable=CONFLICTING or mergeStateStatus=BEHIND."
+           echo "- Run './gradlew githubMergeAll' to enable auto-merge on open PRs."
+           echo "- Run './gradlew githubCleanupClosedPRs' to review stale merged/closed branch refs."
+       """.trimIndent()
+    ))
+}
+
+tasks.register("githubSummary") {
+    group = "github"
+    description = "Alias for githubPRSummary."
+    dependsOn("githubPRSummary")
+}
+
 tasks.register<Exec>("githubFixAll") {
     group = "github"
     description = "Attempts to fix all open PRs by updating them and rerunning failed workflow runs."
