@@ -1,5 +1,11 @@
 name: Scheduled GitHub Automation - Auto-fix & Auto-merge
 
+permissions:
+  contents: write
+  pull-requests: write
+  checks: write
+  issues: write
+
 on:
   schedule:
     # Daily at 02:00 UTC (adjust as needed)
