@@ -318,6 +318,10 @@ tasks.register<Exec>("githubMain") {
 
 val pruneLocalDefault = project.findProperty("pruneLocalBranches")?.toString()?.equals("true", ignoreCase = true) ?: false
 val deleteRemoteDefault = project.findProperty("deleteClosedPrBranches")?.toString()?.equals("true", ignoreCase = true) ?: false
+// When true, remove obsolete branches automatically. Default TRUE for full automation.
+val removeObsoleteDefault = project.findProperty("removeObsoleteBranches")?.toString()?.equals("true", ignoreCase = true) ?: true
+// Number of days of inactivity after which a branch is considered obsolete (default: 90 days)
+val obsoleteDays = project.findProperty("obsoleteDays")?.toString() ?: "90"
 
 // Deletes remote branches for merged/closed PRs. Dry-run by default; set -PdeleteClosedPrBranches=true or env DELETE_REMOTE=true to actually delete.
 tasks.register<Exec>("githubCleanupRemoteBranches") {
@@ -744,6 +748,129 @@ tasks.register<Exec>("githubWiki") {
     group = "github"
     description = "Opens the project Wiki in your default browser."
     commandLine("gh", "repo", "view", "--web", "--path", "wiki")
+}
+
+// New task: removes obsolete branches based on inactivity or merged/no-PR criteria.
+tasks.register<Exec>("githubRemoveObsoleteBranches") {
+    group = "github"
+    description = "Removes obsolete remote branches: merged or inactive branches older than OBSOLETE_DAYS. Dry-run by default; set -PremoveObsoleteBranches=true or env REMOVE_MODE=true to delete."
+    commandLine("bash", "-c", asGitHubScript(
+       """
+         if ! command -v gh >/dev/null 2>&1; then
+           echo "gh not installed; skipping obsolete branch removal."
+           exit 0
+         fi
+         REMOVE_MODE="${'$'}{REMOVE_MODE:-${if (removeObsoleteDefault) "true" else "false"}}"
+         DAYS="${'$'}{REMOVE_DAYS:-${obsoleteDays}}"
+         echo "Obsolete branch removal preview (REMOVE_MODE=${'$'}REMOVE_MODE) - branches older than ${'$'}DAYS days will be removed if merged or no open PR exists."
+         gh api repos/:owner/:repo/branches --jq '.[] | .name' | while read -r branch; do
+           if [ "${'$'}branch" = "${'$'}BASE_BRANCH" ]; then continue; fi
+           # Skip protected branches
+           prot="${'$'}(gh api repos/:owner/:repo/branches/${'$'}branch --jq '.protected' 2>/dev/null || echo false)"
+           if [ "${'$'}prot" = "true" ]; then
+             echo "Skipping protected branch: ${'$'}branch"
+             continue
+           fi
+           # check open PRs
+           open_pr="${'$'}(gh pr list --state open --json headRefName --jq '.[] | .headRefName' | grep -x -- "${'$'}branch" || true)"
+           if [ -n "${'$'}open_pr" ]; then
+             echo "Skipping ${'$'}branch: has open PR"
+             continue
+           fi
+           # check merged PR
+           merged_pr="${'$'}(gh pr list --state merged --json headRefName --jq '.[] | .headRefName' | grep -x -- "${'$'}branch" || true)"
+           if [ -n "${'$'}merged_pr" ]; then
+             echo "${'$'}branch has merged PR; eligible for deletion."
+             if [ "${'$'}REMOVE_MODE" = "true" ]; then
+               echo "Deleting remote branch ${'$'}branch..."
+               gh api -X DELETE "repos/:owner/:repo/git/refs/heads/${'$'}branch" || echo "Failed to delete ${'$'}branch (protected or missing)."
+             else
+               echo "[DRY-RUN] would delete remote branch: ${'$'}branch"
+             fi
+             continue
+           fi
+           # check last commit date
+           dt="${'$'}(gh api repos/:owner/:repo/branches/${'$'}branch --jq '.commit.commit.committer.date' 2>/dev/null || true)"
+           if [ -z "${'$'}dt" ]; then
+             echo "Could not determine commit date for ${'$'}branch; skipping."
+             continue
+           fi
+           branch_epoch="${'$'}(date -d "${'$'}dt" +%s)"
+           cutoff="${'$'}(date -d "-${'$'}DAYS days" +%s)"
+           if [ "${'$'}branch_epoch" -lt "${'$'}cutoff" ]; then
+             echo "${'$'}branch last commit ${'$'}dt is older than ${'$'}DAYS days; eligible for deletion."
+             if [ "${'$'}REMOVE_MODE" = "true" ]; then
+               echo "Deleting remote branch ${'$'}branch..."
+               gh api -X DELETE "repos/:owner/:repo/git/refs/heads/${'$'}branch" || echo "Failed to delete ${'$'}branch (protected or missing)."
+             else
+               echo "[DRY-RUN] would delete remote branch: ${'$'}branch"
+             fi
+           else
+             echo "${'$'}branch is recent; skipping."
+           fi
+         done
+       """.trimIndent()
+    ))
+    environment("REMOVE_MODE", if (removeObsoleteDefault) "true" else "false")
+}
+
+// New task: removes local obsolete branches based on inactivity or merged criteria.
+tasks.register<Exec>("githubRemoveLocalObsoleteBranches") {
+    group = "github"
+    description = "Prunes local branches that are merged into base, have no upstream, or are older than OBSELETE_DAYS. Dry-run by default; set -PpruneLocalBranches=true or env PRUNE_LOCAL_MODE=true to delete."
+    commandLine("bash", "-c", asGitHubScript(
+      """
+        PRUNE_LOCAL_MODE="${'$'}{PRUNE_LOCAL_MODE:-${if (pruneLocalDefault) "true" else "false"}}"
+        DAYS="${'$'}{PRUNE_LOCAL_DAYS:-${obsoleteDays}}"
+        echo "Local prune preview (PRUNE_LOCAL_MODE=${'$'}PRUNE_LOCAL_MODE) - branches older than ${'$'}DAYS days without upstream or merged into base will be removed."
+
+        git fetch --prune || true
+
+        git for-each-ref --format='%(refname:short)' refs/heads | while read -r local; do
+          # skip current and base
+          if [ "${'$'}local" = "${'$'}CURRENT_BRANCH" ] || [ "${'$'}local" = "${'$'}BASE_BRANCH" ]; then
+            continue
+          fi
+
+          # check upstream
+          upstream="${'$'}(git for-each-ref --format='%(upstream:short)' refs/heads/${'$'}local)"
+          if [ -z "${'$'}upstream" ]; then
+            echo "[DRY-RUN] local branch ${'$'}local has no upstream"
+            dt="${'$'}(git log -1 --format=%ci ${'$'}local 2>/dev/null || true)"
+            if [ -z "${'$'}dt" ]; then
+              echo "  Could not determine commit date for ${'$'}local; skipping."
+              continue
+            fi
+            branch_epoch="${'$'}(date -d "${'$'}dt" +%s)"
+            cutoff="${'$'}(date -d "-${'$'}DAYS days" +%s)"
+            if [ "${'$'}branch_epoch" -lt "${'$'}cutoff" ]; then
+              echo "${'$'}local is older than ${'$'}DAYS days and has no upstream; eligible for deletion."
+              if [ "${'$'}PRUNE_LOCAL_MODE" = "true" ]; then
+                echo "Deleting local branch ${'$'}local..."
+                git branch -D "${'$'}local" || git branch -d "${'$'}local"
+              else
+                echo "[DRY-RUN] would delete local branch: ${'$'}local"
+              fi
+            else
+              echo "${'$'}local is recent; skipping."
+            fi
+            continue
+          fi
+
+          # if merged into remote/base
+          if git merge-base --is-ancestor "${'$'}local" "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" 2>/dev/null || git merge-base --is-ancestor "${'$'}local" "${'$'}BASE_BRANCH" 2>/dev/null; then
+            echo "Local branch ${'$'}local is merged into base; eligible for deletion."
+            if [ "${'$'}PRUNE_LOCAL_MODE" = "true" ]; then
+              echo "Deleting local branch ${'$'}local..."
+              git branch -D "${'$'}local" || git branch -d "${'$'}local"
+            else
+              echo "[DRY-RUN] would delete local branch: ${'$'}local"
+            fi
+          fi
+        done
+      """.trimIndent()
+    ))
+    environment("PRUNE_LOCAL_MODE", if (pruneLocalDefault) "true" else "false")
 }
 
 tasks.register<Exec>("githubActions") {
