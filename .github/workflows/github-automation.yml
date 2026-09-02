@@ -65,7 +65,7 @@ jobs:
 
       - name: Optionally prune local branches on runner
         if: ${{ secrets.PRUNE_LOCAL_BRANCHES == 'true' }}
-        run: ./gradlew githubRemoveLocalObsoleteBranches
+        run: ./gradlew githubRemoveLocalObsoleteBranchesKotlin
         env:
           PRUNE_LOCAL_MODE: ${{ secrets.PRUNE_LOCAL_BRANCHES }}
           PRUNE_LOCAL_DAYS: ${{ secrets.PRUNE_LOCAL_DAYS != '' && secrets.PRUNE_LOCAL_DAYS || '90' }}
