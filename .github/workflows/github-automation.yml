@@ -84,9 +84,16 @@ jobs:
         if: always()
         run: |
           if grep -qE "Deleting remote branch|Deleting local branch|Reset will drop|will be lost" automation-audit/audit.txt; then
-            TITLE="Automation alert: destructive actions in run $GITHUB_RUN_ID"
-            echo "Destructive actions detected. Creating issue: $TITLE"
-            gh issue create --title "$TITLE" --body-file automation-audit/audit.txt || echo "Failed to create issue"
+            TITLE="Automation alert: destructive actions"
+            echo "Destructive actions detected. Looking for existing automation-alert issue to comment on..."
+            EXISTING=$(gh issue list --label automation-alert --state open --json number -q '.[0].number' 2>/dev/null || true)
+            if [ -n "${EXISTING}" ]; then
+              echo "Commenting on existing issue #${EXISTING}"
+              gh issue comment "${EXISTING}" --body-file automation-audit/audit.txt || echo "Failed to comment on issue ${EXISTING}"
+            else
+              echo "Creating new issue with label automation-alert"
+              gh issue create --title "${TITLE}" --body-file automation-audit/audit.txt --label automation-alert || echo "Failed to create issue"
+            fi
           else
             echo "No destructive actions detected."
           fi
