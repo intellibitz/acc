@@ -113,34 +113,70 @@ open class CleanupRemoteBranchesTask : BaseGitHubTask() {
         val repo = repoFull()
         val base = if (baseBranchInput.isNotBlank()) baseBranchInput else "main"
         val current = currentBranchInput
-        logger.lifecycle("Cleaning up merged remote branches for repository $repo (deleteMode=$deleteModeInput)...")
+        val repoDir = rootDir
 
-        val (rc, out) = runCmd("gh", "pr", "list", "--state", "merged", "--repo", repo, "--limit", "500", "--json", "number,headRefName", "-q", ".[] | [.number, .headRefName] | @tsv")
-        if (rc != 0) {
-            logger.warn("Failed to list merged PRs: $out")
-            return
-        }
+        logger.lifecycle("Cleaning up merged/stale remote branches for repository $repo (deleteMode=$deleteModeInput)...")
+        runCmd("git", "fetch", "origin", "--prune", workingDir = repoDir)
 
         val deleted = mutableSetOf<String>()
-        out.lines().forEach { line ->
-            if (line.isBlank()) return@forEach
-            val parts = line.split('\t')
-            val pr = parts.getOrNull(0) ?: return@forEach
-            val branch = parts.getOrNull(1) ?: return@forEach
-            if (branch.isBlank() || branch == base || branch == current || branch == "main" || branch == "master") return@forEach
-            if (deleted.contains(branch)) return@forEach
 
-            logger.lifecycle("Merged PR #$pr branch '$branch' detected for remote cleanup.")
-            if (deleteModeInput) {
-                val (dRc, dOut) = runCmd("gh", "api", "-X", "DELETE", "repos/$repo/git/refs/heads/$branch")
-                if (dRc == 0) {
-                    logger.lifecycle("Successfully deleted remote branch '$branch'")
-                    deleted.add(branch)
-                } else {
-                    logger.lifecycle("Remote branch '$branch' already deleted or protected: $dOut")
+        // 1. Check head branches from merged and closed PRs
+        for (state in listOf("merged", "closed")) {
+            val (rc, out) = runCmd("gh", "pr", "list", "--state", state, "--repo", repo, "--limit", "1000", "--json", "number,headRefName", "-q", ".[] | [.number, .headRefName] | @tsv")
+            if (rc == 0) {
+                out.lines().forEach { line ->
+                    if (line.isBlank()) return@forEach
+                    val parts = line.split('\t')
+                    val pr = parts.getOrNull(0) ?: return@forEach
+                    val branch = parts.getOrNull(1) ?: return@forEach
+                    if (branch.isBlank() || branch == base || branch == current || branch == "main" || branch == "master") return@forEach
+                    if (deleted.contains(branch)) return@forEach
+
+                    logger.lifecycle("PR #$pr ($state) branch '$branch' detected for remote cleanup.")
+                    if (deleteModeInput) {
+                        val (dRc, dOut) = runCmd("gh", "api", "-X", "DELETE", "repos/$repo/git/refs/heads/$branch")
+                        if (dRc == 0) {
+                            logger.lifecycle("Successfully deleted remote branch '$branch'")
+                            deleted.add(branch)
+                        } else {
+                            logger.lifecycle("Remote branch '$branch' already deleted or protected: $dOut")
+                        }
+                    } else {
+                        logger.lifecycle("[DRY-RUN] Would delete remote branch '$branch'")
+                    }
                 }
-            } else {
-                logger.lifecycle("[DRY-RUN] Would delete remote branch '$branch'")
+            }
+        }
+
+        // 2. Check all remote branches to see if they are merged into origin/base or have no open PR
+        val (rRc, rOut) = runCmd("git", "for-each-ref", "--format=%(refname:short)", "refs/remotes/origin/", workingDir = repoDir)
+        if (rRc == 0) {
+            rOut.lines().forEach { ref ->
+                val branch = ref.removePrefix("origin/").trim()
+                if (branch.isBlank() || branch == "HEAD" || branch == base || branch == current || branch == "main" || branch == "master") return@forEach
+                if (deleted.contains(branch)) return@forEach
+
+                val (mRc, _) = runCmd("git", "merge-base", "--is-ancestor", "origin/$branch", "origin/$base", workingDir = repoDir)
+                val isMerged = mRc == 0
+
+                val (pRc, pOut) = runCmd("gh", "pr", "list", "--head", branch, "--repo", repo, "--state", "open", "--json", "number", "-q", ".[0].number")
+                val hasOpenPr = pRc == 0 && pOut.isNotBlank()
+
+                if (isMerged || (!hasOpenPr && (branch.startsWith("sync/") || branch.startsWith("automation/") || branch.startsWith("feature/")))) {
+                    val reason = if (isMerged) "merged into $base" else "stale branch with no open PR"
+                    logger.lifecycle("Remote branch 'origin/$branch' is eligible for deletion ($reason).")
+                    if (deleteModeInput) {
+                        val (dRc, dOut) = runCmd("gh", "api", "-X", "DELETE", "repos/$repo/git/refs/heads/$branch")
+                        if (dRc == 0) {
+                            logger.lifecycle("Successfully deleted remote branch '$branch'")
+                            deleted.add(branch)
+                        } else {
+                            logger.lifecycle("Remote branch '$branch' already deleted or protected: $dOut")
+                        }
+                    } else {
+                        logger.lifecycle("[DRY-RUN] Would delete remote branch '$branch'")
+                    }
+                }
             }
         }
     }
@@ -192,6 +228,72 @@ open class PruneLocalBranchesTask : BaseGitHubTask() {
                     logger.lifecycle("[DRY-RUN] Would delete local branch '$b'")
                 }
             }
+        }
+    }
+}
+
+open class CheckAndCleanPRTask : BaseGitHubTask() {
+    @TaskAction
+    fun run() {
+        val repo = repoFull()
+        val base = if (baseBranchInput.isNotBlank()) baseBranchInput else "main"
+        val (cRc, cOut) = runCmd("git", "rev-parse", "--abbrev-ref", "HEAD", workingDir = rootDir)
+        val activeBranch = if (cRc == 0) cOut.trim() else ""
+        val targetBranch = currentBranchInput.ifBlank { activeBranch }
+
+        logger.lifecycle("Checking PR status and branch cleanup for '$targetBranch' on $repo...")
+
+        if (targetBranch.isBlank() || targetBranch == base || targetBranch == "main" || targetBranch == "master") {
+            logger.lifecycle("Target branch is default/main; checking all merged PR branches across $repo...")
+            val (rc, out) = runCmd("gh", "pr", "list", "--state", "merged", "--repo", repo, "--limit", "500", "--json", "number,headRefName", "-q", ".[] | [.number, .headRefName] | @tsv")
+            if (rc == 0) {
+                val deleted = mutableSetOf<String>()
+                out.lines().forEach { line ->
+                    if (line.isBlank()) return@forEach
+                    val parts = line.split('\t')
+                    val pr = parts.getOrNull(0) ?: return@forEach
+                    val head = parts.getOrNull(1) ?: return@forEach
+                    if (head.isBlank() || head == base || head == "main" || head == "master") return@forEach
+                    if (deleted.contains(head)) return@forEach
+
+                    logger.lifecycle("PR #$pr for branch '$head' is MERGED. Deleting remote and local branch...")
+                    runCmd("gh", "api", "-X", "DELETE", "repos/$repo/git/refs/heads/$head")
+                    runCmd("git", "branch", "-D", head, workingDir = rootDir)
+                    deleted.add(head)
+                }
+            }
+            return
+        }
+
+        // Check PR for target branch
+        val (rc, out) = runCmd("gh", "pr", "view", targetBranch, "--repo", repo, "--json", "number,state,mergedAt,title,url")
+        if (rc != 0 || out.isBlank()) {
+            logger.lifecycle("No PR found for branch '$targetBranch'.")
+            return
+        }
+
+        logger.lifecycle("PR Info: $out")
+        val isMerged = out.contains("\"state\":\"MERGED\"") || (out.contains("\"mergedAt\":") && !out.contains("\"mergedAt\":null"))
+
+        if (isMerged) {
+            logger.lifecycle("PR for branch '$targetBranch' is MERGED! Deleting remote and local branch...")
+
+            // Return to main branch if currently on the merged branch
+            if (activeBranch == targetBranch) {
+                logger.lifecycle("Switching from merged branch '$targetBranch' back to '$base'...")
+                runCmd("git", "checkout", base, workingDir = rootDir)
+                runCmd("git", "pull", "origin", base, workingDir = rootDir)
+            }
+
+            // Delete remote branch
+            val (dRc, dOut) = runCmd("gh", "api", "-X", "DELETE", "repos/$repo/git/refs/heads/$targetBranch")
+            if (dRc == 0) logger.lifecycle("Deleted remote branch 'origin/$targetBranch'") else logger.lifecycle("Remote branch 'origin/$targetBranch' status: $dOut")
+
+            // Delete local branch
+            val (lRc, lOut) = runCmd("git", "branch", "-D", targetBranch, workingDir = rootDir)
+            if (lRc == 0) logger.lifecycle("Deleted local branch '$targetBranch'") else logger.lifecycle("Local branch '$targetBranch' status: $lOut")
+        } else {
+            logger.lifecycle("PR for branch '$targetBranch' exists but is not yet merged.")
         }
     }
 }

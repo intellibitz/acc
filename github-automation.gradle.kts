@@ -46,6 +46,12 @@ tasks.register("githubPruneLocalBranches") {
     dependsOn("githubPruneLocalBranchesKotlin")
 }
 
+tasks.register("githubCheckAndCleanPRBranch") {
+    group = "github"
+    description = "Checks if PR exists for branch; if merged, deletes both remote and local PR branches (Kotlin-native)"
+    dependsOn("githubCheckAndCleanPRBranchKotlin")
+}
+
 tasks.register("githubPR") {
     group = "github"
     description = "Ensure PR exists (Kotlin-native)"
