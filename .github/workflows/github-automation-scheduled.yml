@@ -77,6 +77,18 @@ jobs:
           AUTO_RESOLVE_MANUAL: ${{ secrets.AUTO_RESOLVE_MANUAL != '' && secrets.AUTO_RESOLVE_MANUAL || 'true' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Remove obsolete branches (auto)
+        if: ${{ github.event.inputs.run_tasks == 'all' || github.event.inputs.run_tasks == 'merge' }}
+        run: ./gradlew githubRemoveObsoleteBranches
+        env:
+          REMOVE_MODE: ${{ secrets.REMOVE_MODE != '' && secrets.REMOVE_MODE || 'true' }}
+          REMOVE_DAYS: ${{ secrets.REMOVE_DAYS != '' && secrets.REMOVE_DAYS || '90' }}
+          MAIN_RESET_CONFIRM: ${{ secrets.MAIN_RESET_CONFIRM }}
+          FORCE_PUSH_CONFIRM: ${{ secrets.FORCE_PUSH_CONFIRM }}
+          GH_SKIP_AUTH_CHECK: ${{ secrets.GH_SKIP_AUTH_CHECK }}
+          AUTO_RESOLVE_MANUAL: ${{ secrets.AUTO_RESOLVE_MANUAL != '' && secrets.AUTO_RESOLVE_MANUAL || 'true' }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Cleanup remote branches (dry-run unless DELETE_REMOTE_BRANCHES secret=true)
         run: ./gradlew githubCleanupRemoteBranches
         env:
