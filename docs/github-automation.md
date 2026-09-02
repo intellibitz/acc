@@ -53,3 +53,11 @@ Snippet to include in other workflows (example step):
 
 Add this preflight step before any step that calls the actionable Gradle tasks (githubSync, githubMergeAll, githubMain, etc.).
 E2E automation test at 20260902-203638
+
+Rebase skip pattern
+
+- REBASE_SKIP_PATTERN: Regex environment variable controlling which branches githubSync will skip rebasing. Default: '^(test/|automation/)'.
+- Purpose: Prevent automated rebases for temporary or automation-managed branches (e.g., test/, automation/) so automation doesn't block on conflicts.
+- Example (override): REBASE_SKIP_PATTERN='^(test/|automation/|wip/)' ./gradlew githubSync
+
+Update the pattern in CI if you use different branch prefixes for temporary or automation branches.
