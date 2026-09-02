@@ -67,6 +67,32 @@ val featureSuffix = if (featureName.isNotBlank()) "-${sanitizedBranchName(featur
 
 fun asGitHubScript(vararg parts: String): String = (listOf(gitHubCommonScript) + parts).joinToString("\n\n")
 
+// High-level GitHub workflow tasks
+
+tasks.register("github") {
+    group = "github"
+    description = "Runs the standard GitHub automation workflow: sync, ensure a PR, and watch checks."
+    dependsOn("githubSync", "githubPR", "githubChecks")
+}
+
+tasks.register<Exec>("githubStatus") {
+    group = "github"
+    description = "Displays the repo, current branch, default branch, and PR status when available."
+    commandLine("bash", "-c", asGitHubScript(
+        """
+            echo "Repository: ${'$'}(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+            echo "Current branch: ${'$'}CURRENT_BRANCH"
+            echo "Default branch: ${'$'}BASE_BRANCH"
+            echo "------------------------------------------------------------"
+            if command -v gh >/dev/null 2>&1; then
+              gh pr status || gh repo view --json nameWithOwner
+            else
+              git status --short --branch
+            fi
+        """.trimIndent()
+    ))
+}
+
 // GitHub sync / branch hygiene tasks
 
 tasks.register<Exec>("githubSync") {
