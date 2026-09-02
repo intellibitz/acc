@@ -16,7 +16,7 @@ Important Workflows
 
 - .github/workflows/github-automation-scheduled.yml
   - Trigger: daily CRON (default 02:00 UTC), workflow_dispatch, or tag pushes
-  - Runs githubFixAll, githubMergeAll, githubRemoveObsoleteBranches, and (optionally) local prune
+  - Runs githubFixAll, githubMergeAll, githubRemoveObsoleteBranchesKotlin (Kotlin-native), and (optionally) local prune (githubRemoveLocalObsoleteBranchesKotlin)
 
 - .github/workflows/auto-promote-release.yml
   - Trigger: release published
@@ -36,13 +36,13 @@ Key Gradle Tasks
 - githubCleanupRemoteBranches
   - Safe remote cleanup (dry-run by default). Controlled by DELETE_MODE or -PdeleteClosedPrBranches
 
-- githubRemoveObsoleteBranches
-  - New: removes remote branches that are merged or inactive older than a cutoff
+- githubRemoveObsoleteBranchesKotlin
+  - New Kotlin-native task: removes remote branches that are merged or inactive older than a cutoff
   - Dry-run by default. Enable live deletes with REMOVE_MODE=true or -PremoveObsoleteBranches=true
   - Cutoff defaults to 90 days (set with REMOVE_DAYS)
 
-- githubRemoveLocalObsoleteBranches
-  - New: prunes local branches that are merged into base, have no upstream, or are older than cutoff
+- githubRemoveLocalObsoleteBranchesKotlin
+  - New Kotlin-native task: prunes local branches that are merged into base, have no upstream, or are older than cutoff
   - Dry-run by default. Enable with PRUNE_LOCAL_MODE=true or -PpruneLocalBranches=true
   - Note: running on GitHub-hosted runners only affects that ephemeral runner; enable on self-hosted runners only when desired
 
