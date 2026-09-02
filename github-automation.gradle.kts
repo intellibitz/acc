@@ -43,6 +43,19 @@ val gitHubCommonScript = """
      echo "No git remote configured; operating in local-only mode."
     fi
 
+    # Ensure gh is authenticated when present. Use GH_SKIP_AUTH_CHECK=true to bypass in CI or special cases.
+    ensure_gh_authenticated() {
+      if ! command -v gh >/dev/null 2>&1; then
+        return 0
+      fi
+      if gh auth status >/dev/null 2>&1; then
+        return 0
+      fi
+      echo "GitHub CLI 'gh' is installed but not authenticated. Run 'gh auth login' or set GH_SKIP_AUTH_CHECK=true to bypass." >&2
+      # If interactive, allow the user to confirm proceeding without gh auth via prompt; else abort.
+      confirm_or_abort GH_SKIP_AUTH_CHECK "Proceed without gh authentication (remote operations may fail)?"
+    }
+
     BASE_BRANCH=""
     if command -v gh >/dev/null 2>&1 && [ -n "${'$'}REMOTE_NAME" ]; then
      BASE_BRANCH="${'$'}(gh repo view --json defaultBranchRef -q .defaultBranchRef.name 2>/dev/null || true)"

@@ -20,5 +20,15 @@ Usage examples
 
 Notes
 
-- The automation attempts to update all feature branches (gh pr update-branch) before enabling auto-merge. Ensure the GitHub CLI (gh) is installed and authenticated for operations that touch remote PRs.
+- The automation attempts to update all feature branches (gh pr update-branch) before enabling auto-merge.
+
+- GitHub CLI (gh) authentication:
+  - The script checks for 'gh' being installed and (when present) verifies 'gh auth status'. If 'gh' is installed but not authenticated, the script will abort unless GH_SKIP_AUTH_CHECK=true is set in the environment.
+  - For interactive local runs, the script will prompt to proceed without authentication (not recommended).
+  - For CI, authenticate 'gh' via a GITHUB_TOKEN or use 'gh auth login --with-token' in the runner; alternatively, set GH_SKIP_AUTH_CHECK=true to bypass the check (not recommended).
+
+- CI safety recommendations:
+  - Non-interactive runs must explicitly allow destructive actions by setting MAIN_RESET_CONFIRM=true and FORCE_PUSH_CONFIRM=true.
+  - Prefer authenticating 'gh' in CI instead of bypassing the auth check.
+
 - The docs live in docs/github-automation.md; update as needed when behavior changes.
