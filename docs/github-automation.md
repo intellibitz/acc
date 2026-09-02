@@ -77,6 +77,13 @@ Automation tasks summary
 - githubCleanupClosedPRs / githubCleanupRemoteBranches: Scan merged/closed PRs and (dry-run by default) delete stale remote branches; enable actual deletion via DELETE_MODE/Gradle property.
 - githubPruneLocalBranches: Prune local branches with no upstream, whose upstream was deleted, or merged into the base branch (dry-run by default; enable with PRUNE_MODE).
 - githubPreflight: Pre-flight checks for gh authentication and effective flags (MAIN_RESET_CONFIRM, FORCE_PUSH_CONFIRM, GH_SKIP_AUTH_CHECK). Intended for CI and local safety.
+
+AUTO_RESOLVE_MANUAL
+
+- AUTO_RESOLVE_MANUAL: When set to 'true' (default), automation attempts to auto-resolve PRs that are waiting for manual intervention: it will update branches, rerun failing CI runs, and attempt to auto-approve PRs before enabling auto-merge. This is enabled by default to let Gradle automation merge PRs that only need manual approvals or CI reruns.
+- To disable automated manual-resolution, set AUTO_RESOLVE_MANUAL=false in your environment or repository secrets.
+
+
 - githubSetup: Convenience task to enable repo settings (auto-merge, delete-branch-on-merge, allow update-branch, enable squash merge).
 - githubChecks: Show CI/checks status for the current PR/branch.
 - githubPRSummary / githubSummary: Print a safe PR summary (open PRs, merged PRs, stale branches) and recommended actions.

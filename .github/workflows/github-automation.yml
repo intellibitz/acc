@@ -37,6 +37,7 @@ jobs:
           MAIN_RESET_CONFIRM: ${{ secrets.MAIN_RESET_CONFIRM != '' && secrets.MAIN_RESET_CONFIRM || 'true' }}
           FORCE_PUSH_CONFIRM: ${{ secrets.FORCE_PUSH_CONFIRM != '' && secrets.FORCE_PUSH_CONFIRM || 'true' }}
           GH_SKIP_AUTH_CHECK: ${{ secrets.GH_SKIP_AUTH_CHECK != '' && secrets.GH_SKIP_AUTH_CHECK || 'true' }}
+          AUTO_RESOLVE_MANUAL: ${{ secrets.AUTO_RESOLVE_MANUAL != '' && secrets.AUTO_RESOLVE_MANUAL || 'true' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run requested automation task (optional)
@@ -53,6 +54,7 @@ jobs:
           MAIN_RESET_CONFIRM: ${{ secrets.MAIN_RESET_CONFIRM != '' && secrets.MAIN_RESET_CONFIRM || 'true' }}
           FORCE_PUSH_CONFIRM: ${{ secrets.FORCE_PUSH_CONFIRM != '' && secrets.FORCE_PUSH_CONFIRM || 'true' }}
           GH_SKIP_AUTH_CHECK: ${{ secrets.GH_SKIP_AUTH_CHECK != '' && secrets.GH_SKIP_AUTH_CHECK || 'true' }}
+          AUTO_RESOLVE_MANUAL: ${{ secrets.AUTO_RESOLVE_MANUAL != '' && secrets.AUTO_RESOLVE_MANUAL || 'true' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build audit log
@@ -65,6 +67,7 @@ jobs:
           echo "MAIN_RESET_CONFIRM=${{ secrets.MAIN_RESET_CONFIRM != '' && secrets.MAIN_RESET_CONFIRM || 'true' }}" >> automation-audit/audit.txt
           echo "FORCE_PUSH_CONFIRM=${{ secrets.FORCE_PUSH_CONFIRM != '' && secrets.FORCE_PUSH_CONFIRM || 'true' }}" >> automation-audit/audit.txt
           echo "GH_SKIP_AUTH_CHECK=${{ secrets.GH_SKIP_AUTH_CHECK != '' && secrets.GH_SKIP_AUTH_CHECK || 'true' }}" >> automation-audit/audit.txt
+          echo "AUTO_RESOLVE_MANUAL=${{ secrets.AUTO_RESOLVE_MANUAL != '' && secrets.AUTO_RESOLVE_MANUAL || 'true' }}" >> automation-audit/audit.txt
           echo "GITHUB_REF=${{ github.ref }}" >> automation-audit/audit.txt
           echo "Recent merged PRs:" >> automation-audit/audit.txt
           gh pr list --state merged --limit 20 --json number,title,mergedAt --jq '.[] | "#\(.number) \(.title) (merged: \(.mergedAt))"' >> automation-audit/audit.txt || true
