@@ -1,0 +1,72 @@
+name: Scheduled GitHub Automation - Auto-fix & Auto-merge
+
+on:
+  schedule:
+    # Daily at 02:00 UTC (adjust as needed)
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      run_tasks:
+        description: 'Which tasks to run (all|fix|merge). Default: all'
+        required: false
+        default: 'all'
+  push:
+    tags:
+      - 'automation/*'
+
+jobs:
+  automation:
+    name: Auto-fix & Auto-merge
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Prepare Gradle
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --version
+
+      - name: Ensure required secrets for destructive ops
+        env:
+          MAIN_RESET_CONFIRM: ${{ secrets.MAIN_RESET_CONFIRM }}
+          FORCE_PUSH_CONFIRM: ${{ secrets.FORCE_PUSH_CONFIRM }}
+        run: |
+          if [ "${MAIN_RESET_CONFIRM}" != "true" ] || [ "${FORCE_PUSH_CONFIRM}" != "true" ]; then
+            echo "ERROR: Scheduled automation requires MAIN_RESET_CONFIRM=true and FORCE_PUSH_CONFIRM=true set as repository secrets." >&2
+            echo "These are required to allow the workflow to perform resets or force-with-lease pushes when necessary." >&2
+            exit 1
+          fi
+
+      - name: Preflight (gh auth and env checks)
+        run: ./gradlew githubPreflight
+        env:
+          MAIN_RESET_CONFIRM: ${{ secrets.MAIN_RESET_CONFIRM }}
+          FORCE_PUSH_CONFIRM: ${{ secrets.FORCE_PUSH_CONFIRM }}
+          GH_SKIP_AUTH_CHECK: ${{ secrets.GH_SKIP_AUTH_CHECK }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run auto-fix (update branches, rerun failed CI)
+        if: ${{ github.event.inputs.run_tasks == 'all' || github.event.inputs.run_tasks == 'fix' }}
+        run: ./gradlew githubFixAll
+        env:
+          MAIN_RESET_CONFIRM: ${{ secrets.MAIN_RESET_CONFIRM }}
+          FORCE_PUSH_CONFIRM: ${{ secrets.FORCE_PUSH_CONFIRM }}
+          GH_SKIP_AUTH_CHECK: ${{ secrets.GH_SKIP_AUTH_CHECK }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run auto-merge (update & enable auto-merge for mergeable PRs)
+        if: ${{ github.event.inputs.run_tasks == 'all' || github.event.inputs.run_tasks == 'merge' }}
+        run: ./gradlew githubMergeAll
+        env:
+          MAIN_RESET_CONFIRM: ${{ secrets.MAIN_RESET_CONFIRM }}
+          FORCE_PUSH_CONFIRM: ${{ secrets.FORCE_PUSH_CONFIRM }}
+          GH_SKIP_AUTH_CHECK: ${{ secrets.GH_SKIP_AUTH_CHECK }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
