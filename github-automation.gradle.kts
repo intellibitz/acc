@@ -553,6 +553,50 @@ tasks.register<Exec>("githubSetup") {
     commandLine("gh", "repo", "edit", "--enable-auto-merge", "--delete-branch-on-merge", "--allow-update-branch", "--enable-squash-merge")
 }
 
+// Pre-flight check for CI and local runs: verifies gh auth (unless skipped) and required env vars
+tasks.register<Exec>("githubPreflight") {
+    group = "github"
+    description = "Performs pre-flight checks: gh auth, and required env var checklist for destructive ops."
+    commandLine("bash", "-c", asGitHubScript(
+       """
+           # ensure gh is authenticated (or confirm to proceed)
+           ensure_gh_authenticated || true
+
+           echo "============================================================"
+           echo "GitHub Automation Preflight"
+           echo "Repository: ${'$'}(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+           echo "Default branch: ${'$'}BASE_BRANCH"
+           echo "Current branch: ${'$'}CURRENT_BRANCH"
+           echo "------------------------------------------------------------"
+
+           if command -v gh >/dev/null 2>&1; then
+             if gh auth status >/dev/null 2>&1; then
+               echo "- gh installed: yes"
+               echo "- gh authenticated: yes"
+             else
+               echo "- gh installed: yes"
+               echo "- gh authenticated: NO"
+               echo "  Set GH_SKIP_AUTH_CHECK=true to bypass (not recommended); or run 'gh auth login'."
+             fi
+           else
+             echo "- gh installed: NO"
+           fi
+
+           echo "- MAIN_RESET_CONFIRM=${'$'}{MAIN_RESET_CONFIRM:-false}"
+           echo "- FORCE_PUSH_CONFIRM=${'$'}{FORCE_PUSH_CONFIRM:-false}"
+           echo "- GH_SKIP_AUTH_CHECK=${'$'}{GH_SKIP_AUTH_CHECK:-false}"
+
+           # Fail fast for CI safety if gh exists but unauthenticated and skip not set
+           if command -v gh >/dev/null 2>&1 && ! gh auth status >/dev/null 2>&1 && [ "${'$'}{GH_SKIP_AUTH_CHECK:-}" != "true" ]; then
+             echo "ERROR: gh is installed but unauthenticated. Abort preflight (set GH_SKIP_AUTH_CHECK=true to bypass)." >&2
+             exit 1
+           fi
+
+           echo "Preflight checks passed (or user confirmed)."
+       """.trimIndent()
+    ))
+}
+
 tasks.register<Exec>("githubChecks") {
     group = "github"
     description = "Displays the status of GitHub Action checks for the current branch."
