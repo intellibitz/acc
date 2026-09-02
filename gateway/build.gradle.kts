@@ -26,10 +26,17 @@ tasks.named<ShadowJar>("shadowJar") {
     }
 }
 
+val isRelease = project.hasProperty("release") || 
+               gradle.startParameter.taskNames.any { it.contains("release", ignoreCase = true) }
+
 tasks.register<Copy>("copyWasmFrontend") {
     description = "Copies the Wasm frontend distribution to the gateway resources."
-    dependsOn(":frontend:web:wasmJsBrowserDistribution")
-    from(project(":frontend:web").layout.buildDirectory.dir("dist/wasmJs/productionExecutable"))
+    val frontendTask = if (isRelease) ":frontend:web:wasmJsBrowserDistribution" 
+                       else ":frontend:web:wasmJsBrowserDevelopmentExecutableDistribution"
+    val frontendDir = if (isRelease) "productionExecutable" else "developmentExecutable"
+    
+    dependsOn(frontendTask)
+    from(project(":frontend:web").layout.buildDirectory.dir("dist/wasmJs/$frontendDir"))
     into(project.layout.buildDirectory.dir("resources/main/static"))
 }
 
