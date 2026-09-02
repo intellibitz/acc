@@ -175,12 +175,27 @@ tasks.register<Exec>("githubSync") {
              exit 0
            fi
 
-           if [ -n "${'$'}REMOTE_NAME" ] && git rev-parse --verify "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" >/dev/null 2>&1; then
-             echo "🌿 Rebasing ${'$'}CURRENT_BRANCH onto ${'$'}REMOTE_NAME/${'$'}BASE_BRANCH..."
-             git rebase "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" || { echo "❌ Rebase onto ${'$'}BASE_BRANCH failed. Resolve conflicts manually." >&2; exit 1; }
-           elif git show-ref --verify --quiet "refs/heads/${'$'}BASE_BRANCH"; then
-             echo "🌿 Rebasing ${'$'}CURRENT_BRANCH onto local ${'$'}BASE_BRANCH..."
-             git rebase "${'$'}BASE_BRANCH" || { echo "❌ Rebase onto ${'$'}BASE_BRANCH failed. Resolve conflicts manually." >&2; exit 1; }
+           REBASE_SKIP_PATTERN="${'$'}{REBASE_SKIP_PATTERN:-^(test/|automation/)}"
+           if echo "${'$'}CURRENT_BRANCH" | grep -E "${'$'}REBASE_SKIP_PATTERN" >/dev/null 2>&1; then
+             echo "⚠️ Skipping rebase for branch ${'$'}CURRENT_BRANCH (matches skip pattern ${'$'}REBASE_SKIP_PATTERN)"
+           else
+             if [ -n "${'$'}REMOTE_NAME" ] && git rev-parse --verify "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" >/dev/null 2>&1; then
+               echo "🌿 Rebasing ${'$'}CURRENT_BRANCH onto ${'$'}REMOTE_NAME/${'$'}BASE_BRANCH..."
+               if git rebase "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH"; then
+                 echo "✅ Rebase completed."
+               else
+                 echo "❌ Rebase failed for ${'$'}CURRENT_BRANCH. Aborting rebase and skipping rebase to avoid blocking automation." >&2
+                 git rebase --abort 2>/dev/null || true
+               fi
+             elif git show-ref --verify --quiet "refs/heads/${'$'}BASE_BRANCH"; then
+               echo "🌿 Rebasing ${'$'}CURRENT_BRANCH onto local ${'$'}BASE_BRANCH..."
+               if git rebase "${'$'}BASE_BRANCH"; then
+                 echo "✅ Rebase completed."
+               else
+                 echo "❌ Rebase failed for ${'$'}CURRENT_BRANCH. Aborting rebase and skipping rebase to avoid blocking automation." >&2
+                 git rebase --abort 2>/dev/null || true
+               fi
+             fi
            fi
 
            if [ -n "${'$'}REMOTE_NAME" ]; then
