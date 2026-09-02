@@ -15,8 +15,8 @@ buildscript {
             classpath("org.apache.httpcomponents.client5:httpclient5:5.6.3") {
                 because("CVE-2026-64607")
             }
-            classpath("com.fasterxml.jackson.core:jackson-databind:2.18.8") {
-                because("CVE-2026-54512")
+            classpath("com.fasterxml.jackson.core:jackson-databind:2.18.9") {
+                because("CVE-2026-54512, CVE-2026-59889, CVE-2026-54515")
             }
             classpath("io.opentelemetry:opentelemetry-api:1.62.0") {
                 because("CVE-2026-45292")
@@ -140,8 +140,8 @@ subprojects {
                 because("CVE-2026-64607")
             }
             if (requested.group == "com.fasterxml.jackson.core" && requested.name == "jackson-databind") {
-                useVersion("2.18.8")
-                because("CVE-2026-54512")
+                useVersion("2.18.9")
+                because("CVE-2026-54512, CVE-2026-59889, CVE-2026-54515")
             }
             if (requested.group == "io.opentelemetry" && requested.name.startsWith("opentelemetry-")) {
                 useVersion("1.62.0")
