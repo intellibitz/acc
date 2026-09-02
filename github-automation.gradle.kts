@@ -71,8 +71,8 @@ fun asGitHubScript(vararg parts: String): String = (listOf(gitHubCommonScript) +
 
 tasks.register("github") {
     group = "github"
-    description = "Runs the standard GitHub automation workflow: sync, ensure a PR, and watch checks."
-    dependsOn("githubSync", "githubPR", "githubChecks")
+    description = "Runs the standard GitHub automation workflow: update latest main, sync current branch, merge clean PRs, and check status."
+    dependsOn("githubSync", "githubMergeAll", "githubStatus")
 }
 
 tasks.register<Exec>("githubStatus") {
@@ -97,7 +97,7 @@ tasks.register<Exec>("githubStatus") {
 
 tasks.register<Exec>("githubSync") {
     group = "github"
-    description = "Smart sync: updates the current branch by rebasing onto the repository default branch and preserving local work."
+    description = "Updates local main to the latest remote state, syncs the current branch to it, and preserves local work before rebasing."
     commandLine("bash", "-c", asGitHubScript(
        """
            git fetch --all --prune
@@ -108,13 +108,29 @@ tasks.register<Exec>("githubSync") {
              git commit -m "chore: automated sync to GitHub" || true
            fi
 
-           if [ "${'$'}CURRENT_BRANCH" = "${'$'}BASE_BRANCH" ]; then
-             if [ -n "${'$'}REMOTE_NAME" ]; then
-               git fetch "${'$'}REMOTE_NAME" "${'$'}BASE_BRANCH" || true
-               git reset --hard "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" 2>/dev/null || git reset --hard "${'$'}BASE_BRANCH"
+           ORIG_BRANCH="${'$'}CURRENT_BRANCH"
+           if [ -n "${'$'}REMOTE_NAME" ] && git rev-parse --verify "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" >/dev/null 2>&1; then
+             if [ "${'$'}CURRENT_BRANCH" != "${'$'}BASE_BRANCH" ]; then
+               if git show-ref --verify --quiet "refs/heads/${'$'}BASE_BRANCH"; then
+                 echo "🔄 Updating local ${'$'}BASE_BRANCH to the latest remote state..."
+                 git checkout "${'$'}BASE_BRANCH" >/dev/null 2>&1 || git switch "${'$'}BASE_BRANCH"
+                 git reset --hard "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" 2>/dev/null || git reset --hard "${'$'}BASE_BRANCH"
+               else
+                 echo "📥 Creating local ${'$'}BASE_BRANCH from remote..."
+                 git checkout -B "${'$'}BASE_BRANCH" "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH"
+               fi
              else
-               git reset --hard "${'$'}BASE_BRANCH"
+               echo "🔄 Updating local ${'$'}BASE_BRANCH to the latest remote state..."
+               git reset --hard "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" 2>/dev/null || git reset --hard "${'$'}BASE_BRANCH"
              fi
+
+             if [ "${'$'}ORIG_BRANCH" != "${'$'}BASE_BRANCH" ]; then
+               echo "↩️  Returning to ${'$'}ORIG_BRANCH and rebasing onto ${'$'}BASE_BRANCH..."
+               git checkout "${'$'}ORIG_BRANCH" >/dev/null 2>&1 || git switch "${'$'}ORIG_BRANCH"
+             fi
+           fi
+
+           if [ "${'$'}CURRENT_BRANCH" = "${'$'}BASE_BRANCH" ]; then
              exit 0
            fi
 
@@ -235,7 +251,7 @@ tasks.register<Exec>("githubMerge") {
 
 tasks.register<Exec>("githubMergeAll") {
     group = "github"
-    description = "Updates and enables auto-merge for all open pull requests across the repo."
+    description = "Updates all open PR branches to the latest base and auto-merges all clean, mergeable pull requests."
     dependsOn("githubSync")
     commandLine("bash", "-c", asGitHubScript(
        """
@@ -244,21 +260,32 @@ tasks.register<Exec>("githubMergeAll") {
              exit 0
            fi
 
-           gh pr list --state open --json number,title,mergeable,mergeStateStatus --template \
-             '{{range .}}{{.number}}{{"\t"}}{{.mergeable}}{{"\t"}}{{.mergeStateStatus}}{{"\t"}}{{.title}}{{"\n"}}{{end}}' | \
-             while IFS=${'$'}'\t' read -r pr mergeable status title; do
+           gh pr list --state open --json number,title,mergeable,mergeStateStatus,headRefName --template \
+             '{{range .}}{{.number}}{{"\t"}}{{.mergeable}}{{"\t"}}{{.mergeStateStatus}}{{"\t"}}{{.headRefName}}{{"\t"}}{{.title}}{{"\n"}}{{end}}' | \
+             while IFS=${'$'}'\t' read -r pr mergeable status branch title; do
                echo "------------------------------------------------------------"
                echo "PR #${'$'}pr: ${'$'}title"
-               if [ "${'$'}mergeable" = "CONFLICTING" ]; then
-                 echo "⚠️  Skipping: PR has hard conflicts."
+
+               if [ -z "${'$'}branch" ]; then
                  continue
                fi
-               if [ "${'$'}status" = "BEHIND" ]; then
+
+               if [ "${'$'}mergeable" = "CONFLICTING" ] || [ "${'$'}mergeable" = "DRAFT" ]; then
+                 echo "⚠️  Skipping: PR is conflicted or draft."
+                 continue
+               fi
+
+               if [ "${'$'}status" = "BEHIND" ] || [ "${'$'}status" = "UNKNOWN" ]; then
                  echo "🔄 Updating branch with the default branch..."
                  gh pr update-branch "${'$'}pr" || echo "❌ Update failed."
                fi
-               echo "🚀 Enabling auto-merge..."
-               gh pr merge "${'$'}pr" --auto --squash --delete-branch || echo "❌ Merge failed."
+
+               if [ "${'$'}mergeable" = "MERGEABLE" ] || [ "${'$'}status" = "CLEAN" ] || [ "${'$'}status" = "HAS_HOOKS" ]; then
+                 echo "🚀 Enabling auto-merge..."
+                 gh pr merge "${'$'}pr" --auto --squash --delete-branch || echo "❌ Merge failed."
+               else
+                 echo "⏭️  Skipping: PR is not yet mergeable."
+               fi
              done
        """.trimIndent()
     ))
