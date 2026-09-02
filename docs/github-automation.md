@@ -52,3 +52,4 @@ Snippet to include in other workflows (example step):
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 Add this preflight step before any step that calls the actionable Gradle tasks (githubSync, githubMergeAll, githubMain, etc.).
+E2E automation test at 20260902-203638
