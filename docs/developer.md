@@ -1,5 +1,9 @@
 Developer onboarding and automation notes
 
+### ⚠️ Mandatory Creator Rule
+> **ALL Git and GitHub tasks MUST be performed via Gradle tasks ONLY.**
+> Every ACC creator (AI agents, human developers, and contributors) must execute GitHub operations using the Gradle automation tasks (`./gradlew githubSync`, `./gradlew githubPR`, `./gradlew githubMerge`, etc.). Manual `git` and `gh` workflow commands are strictly prohibited.
+
 This project provides CI and local automation for repository maintenance. Key docs:
 
 - GitHub automation: docs/github-automation.md

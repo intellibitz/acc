@@ -132,13 +132,16 @@ check out our [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### 🛠️ Creator Workflow
 
-Creators use a "Smart Sync" engine to ensure zero conflicts and a clean linear history:
+> **⚠️ Mandatory Rule for All ACC Creators (you, me, everyone):**
+> **All Git and GitHub tasks MUST be executed using Gradle automation tasks ONLY.**
+> All creators (AI agents, human developers, and contributors) follow the automated Gradle workflow so GitHub collaboration, branch hygiene, and merge lifecycles are consistently managed by Kotlin-native Gradle tasks.
 
 1. **Run Locally**: `./gradlew :gateway:run`
-2. **Smart Sync**: `./gradlew githubSync` (Ensures local and remote are perfectly aligned).
-3. **Automated Merge**: `./gradlew githubMerge` (Syncs, PRs, and enables auto-merge).
-4. **Test Release**: `./gradlew releaseTest` (Increments version and triggers pre-release).
-5. **Production Release**: `./gradlew releaseProduction` (Promotes to stable release).
+2. **Start Feature**: `./gradlew githubFeature -Pname=MyFeature`
+3. **Smart Sync**: `./gradlew githubSync` (Captures local work and rebases on latest `main`).
+4. **Automated Merge**: `./gradlew githubMerge` (Creates PR, enables auto-merge, and prunes merged branches).
+5. **Test Release**: `./gradlew releaseTest` (Increments version and triggers pre-release).
+6. **Production Release**: `./gradlew releaseProduction` (Promotes to stable release).
 
 For deep-dives into the architecture or modular automation system, see [AGENTS.md](AGENTS.md).
 

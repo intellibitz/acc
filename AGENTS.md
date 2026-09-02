@@ -37,6 +37,11 @@ We use a semi-automated release system triggered by Gradle and completed by GitH
   - Tags and pushes to GitHub.
   - Triggers a **Full Release** on GitHub.
 
+### ⚠️ Mandatory Creator Workflow Rule
+> **STRICT RULE FOR ALL ACC CREATORS (AI Agents, Human Developers, and Contributors):**
+> **All Git and GitHub collaboration operations MUST be executed via Gradle automation tasks ONLY.**
+> Direct execution of manual `git` or `gh` CLI commands for branch management, PR creation, syncing, merging, or branch cleanup is prohibited. Every creator (you, me, everyone) must follow the standardized Gradle workflow so that GitHub collaboration and branch lifecycles are 100% managed by our Kotlin-native automation tasks.
+
 ### GitHub Creator Tasks (Modular Automation)
 We use a modular automation engine in [github-automation.gradle.kts](github-automation.gradle.kts) to manage the repository lifecycle. These tasks ensure a clean, linear history and "Zero Effort" maintenance.
 

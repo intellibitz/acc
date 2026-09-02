@@ -13,20 +13,16 @@ We love your input! We want to make acc the best zero-effort AI orchestration to
 - Open an issue with the tag `enhancement`.
 - Describe the feature and why it fits the "Zero Effort" vision.
 
-### Pull Requests (The "Smart" Way)
-We recommend using the built-in Gradle automation for a frictionless experience:
-1. Fork the repo and clone it.
-2. Run `./gradlew githubFeature -Pname=MyFeature`.
-3. Do your work.
-4. Run `./gradlew githubMerge`.
-5. Sit back while CI passes and the repo auto-merges your contribution.
+### ⚠️ Mandatory Rule for ACC Creators & Contributors
+> **ALL Git and GitHub tasks MUST be executed using Gradle automation tasks ONLY.**
+> All creators (AI agents, human developers, and contributors) must follow the automated Gradle workflow for branch creation, synchronization, pull request creation, auto-merging, and branch pruning. Direct manual `git` or `gh` commands are prohibited.
 
-### Pull Requests (The Manual Way)
-1. Fork the repo.
-2. Create a feature branch (`git checkout -b feature/Superpower`).
-3. Commit your changes (`git commit -m 'Add new model superpower'`).
-4. Push to the branch (`git push origin feature/Superpower`).
-5. Open a Pull Request.
+### Creator & Contributor Workflow
+1. Fork and clone the repository.
+2. Create a feature branch: `./gradlew githubFeature -Pname=MyFeature`
+3. Implement your changes.
+4. Sync and merge: `./gradlew githubMerge`
+5. Sit back while CI passes, auto-merges the PR, and prunes merged remote/local branches automatically.
 
 ## Coding Standards
 - **Shell**: Use `log` and `error` functions from `acc` for consistent output.

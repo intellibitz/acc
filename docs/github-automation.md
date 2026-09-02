@@ -1,5 +1,10 @@
 GitHub Automation: safety flags and behavior
 
+### ⚠️ Mandatory Creator Workflow Rule
+> **STRICT RULE FOR ALL ACC CREATORS (you, me, everyone):**
+> **All Git and GitHub tasks MUST be executed using Gradle automation tasks ONLY.**
+> All creators (AI agents, human developers, and contributors) must follow the automated Gradle workflow for branch creation, synchronization, pull request creation, auto-merging, and branch pruning. Direct manual `git` or `gh` commands for repository collaboration are strictly prohibited.
+
 This project includes a Gradle-based GitHub automation script (github-automation.gradle.kts) that performs common repository maintenance tasks.
 
 New safety features
