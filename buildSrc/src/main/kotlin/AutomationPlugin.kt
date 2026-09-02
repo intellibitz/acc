@@ -25,6 +25,7 @@ open class AutomationPlugin : Plugin<Project> {
         project.tasks.register("githubMergeAllKotlin", MergeAllTask::class.java)
         project.tasks.register("githubSyncKotlin", SyncTask::class.java)
         project.tasks.register("githubFeatureKotlin", FeatureTask::class.java)
+        project.tasks.register("githubMainKotlin", MainTask::class.java)
         project.tasks.register("githubCleanupRemoteBranchesKotlin", CleanupRemoteBranchesTask::class.java)
         project.tasks.register("githubPruneLocalBranchesKotlin", PruneLocalBranchesTask::class.java)
         project.tasks.register("githubFixAllKotlin", FixAllTask::class.java)
