@@ -134,6 +134,33 @@ tasks.register<Exec>("githubStatus") {
 tasks.register<Exec>("githubSync") {
     group = "github"
     description = "Safely updates local main, preserves work, and rebases the current branch onto the latest base without discarding contributor updates."
+    description = "Runs the standard GitHub automation workflow: sync, ensure a PR, and watch checks."
+    dependsOn("githubSync", "githubPR", "githubChecks")
+}
+
+tasks.register<Exec>("githubStatus") {
+    group = "github"
+    description = "Displays the repo, current branch, default branch, and PR status when available."
+    commandLine("bash", "-c", asGitHubScript(
+        """
+            echo "Repository: ${'$'}(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+            echo "Current branch: ${'$'}CURRENT_BRANCH"
+            echo "Default branch: ${'$'}BASE_BRANCH"
+            echo "------------------------------------------------------------"
+            if command -v gh >/dev/null 2>&1; then
+              gh pr status || gh repo view --json nameWithOwner
+            else
+              git status --short --branch
+            fi
+        """.trimIndent()
+    ))
+}
+
+// GitHub sync / branch hygiene tasks
+
+tasks.register<Exec>("githubSync") {
+    group = "github"
+    description = "Smart sync: updates the current branch by rebasing onto the repository default branch and preserving local work."
     commandLine("bash", "-c", asGitHubScript(
        """
            git fetch --all --prune
@@ -183,6 +210,13 @@ tasks.register<Exec>("githubSync") {
 
            if [ "${'$'}CURRENT_BRANCH" = "${'$'}BASE_BRANCH" ]; then
              echo "✅ Local base branch is up to date."
+           if [ "${'$'}CURRENT_BRANCH" = "${'$'}BASE_BRANCH" ]; then
+             if [ -n "${'$'}REMOTE_NAME" ]; then
+               git fetch "${'$'}REMOTE_NAME" "${'$'}BASE_BRANCH" || true
+               git reset --hard "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH" 2>/dev/null || git reset --hard "${'$'}BASE_BRANCH"
+             else
+               git reset --hard "${'$'}BASE_BRANCH"
+             fi
              exit 0
            fi
 
@@ -210,6 +244,7 @@ tasks.register<Exec>("githubSync") {
              else
                git push -u "${'$'}REMOTE_NAME" HEAD
              fi
+             git push -u "${'$'}REMOTE_NAME" HEAD || git push "${'$'}REMOTE_NAME" HEAD --force-with-lease
            fi
        """.trimIndent()
     ))
@@ -293,6 +328,9 @@ tasks.register<Exec>("githubMain") {
                echo "⚠️ Local uncommitted changes present on ${'$'}BASE_BRANCH."
                confirm_or_abort MAIN_RESET_CONFIRM "This will discard local changes on ${'$'}BASE_BRANCH. Confirm reset to local ${'$'}BASE_BRANCH?"
              fi
+             git reset --hard "${'$'}REMOTE_NAME/${'$'}BASE_BRANCH"
+           else
+             git switch "${'$'}BASE_BRANCH" 2>/dev/null || git checkout "${'$'}BASE_BRANCH"
              git reset --hard "${'$'}BASE_BRANCH"
            fi
        """.trimIndent()
@@ -340,6 +378,7 @@ tasks.register<Exec>("githubMerge") {
 tasks.register<Exec>("githubMergeAll") {
     group = "github"
     description = "Updates all open PR branches to the latest base and auto-merges all clean, mergeable pull requests."
+    description = "Updates and enables auto-merge for all open pull requests across the repo."
     dependsOn("githubSync")
     commandLine("bash", "-c", asGitHubScript(
        """
@@ -377,6 +416,21 @@ tasks.register<Exec>("githubMergeAll") {
                else
                  echo "⏭️  Skipping: PR is not yet mergeable after update."
                fi
+           gh pr list --state open --json number,title,mergeable,mergeStateStatus --template \
+             '{{range .}}{{.number}}{{"\t"}}{{.mergeable}}{{"\t"}}{{.mergeStateStatus}}{{"\t"}}{{.title}}{{"\n"}}{{end}}' | \
+             while IFS=${'$'}'\t' read -r pr mergeable status title; do
+               echo "------------------------------------------------------------"
+               echo "PR #${'$'}pr: ${'$'}title"
+               if [ "${'$'}mergeable" = "CONFLICTING" ]; then
+                 echo "⚠️  Skipping: PR has hard conflicts."
+                 continue
+               fi
+               if [ "${'$'}status" = "BEHIND" ]; then
+                 echo "🔄 Updating branch with the default branch..."
+                 gh pr update-branch "${'$'}pr" || echo "❌ Update failed."
+               fi
+               echo "🚀 Enabling auto-merge..."
+               gh pr merge "${'$'}pr" --auto --squash --delete-branch || echo "❌ Merge failed."
              done
        """.trimIndent()
     ))
@@ -497,6 +551,8 @@ tasks.register<Exec>("githubFixAll") {
                  echo "⚠️  Skipping update: PR is conflicted or draft."
                else
                  echo "🔄 Ensuring branch ${'$'}branch is up-to-date with ${'$'}BASE_BRANCH..."
+               if [ "${'$'}status" = "BEHIND" ]; then
+                 echo "🔄 Branch is out-of-date. Updating with the default branch..."
                  gh pr update-branch "${'$'}pr" || echo "❌ Automatic update failed."
                fi
 
