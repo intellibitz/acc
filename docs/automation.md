@@ -1,5 +1,10 @@
 Automation Guide — ACC Repository
 
+### ⚠️ Mandatory Creator Workflow Rule
+> **STRICT RULE FOR ALL ACC CREATORS (you, me, everyone):**
+> **All Git and GitHub tasks MUST be executed using Gradle automation tasks ONLY.**
+> All creators (AI agents, human developers, and contributors) must follow the automated Gradle workflow for branch creation, synchronization, pull request creation, auto-merging, and branch pruning. Direct manual `git` or `gh` commands for repository collaboration are strictly prohibited.
+
 This document describes the repository automation implemented via Gradle tasks and GitHub Actions. It covers available tasks, workflows, secrets, safe usage, and quick commands for dry-run vs live operations.
 
 Overview
