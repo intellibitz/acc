@@ -4,10 +4,20 @@ plugins {
 
 repositories {
     mavenCentral()
+    mavenLocal()
+    // Eclipse releases repository for JGit
+    maven {
+        url = uri("https://repo.eclipse.org/content/repositories/releases/")
+    }
+    // Sonatype OSS in case artifacts are staged there
+    maven {
+        url = uri("https://oss.sonatype.org/content/repositories/releases/")
+    }
+    // JitPack for any GitHub-hosted artifacts
+    maven {
+        url = uri("https://jitpack.io")
+    }
 }
 
-dependencies {
-    implementation("org.eclipse.jgit:org.eclipse.jgit:6.8.0.202305101054-r")
-    implementation("org.kohsuke:github-api:1.332")
-    implementation("org.slf4j:slf4j-simple:2.0.9")
-}
+// No external runtime dependencies required; tasks use the 'gh' and 'git' CLIs when available.
+// Keep buildSrc lightweight to avoid external resolution issues.
