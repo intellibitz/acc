@@ -44,7 +44,7 @@ jobs:
           build-mode: manual
 
       - name: Build project
-        run: ./gradlew --no-daemon compileKotlin test --stacktrace
+        run: ./gradlew --no-daemon :common:compileKotlinJvm :gateway:compileKotlin :frontend:composeApp:compileKotlinJvm :frontend:desktop:compileKotlin --stacktrace
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v3
