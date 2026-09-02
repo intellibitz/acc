@@ -39,9 +39,39 @@ open class AutomationPlugin : Plugin<Project> {
 
 abstract class BaseGitHubTask : DefaultTask() {
     fun connect(): GitHub {
-        val token = (project.findProperty("GITHUB_TOKEN") as? String) ?: System.getenv("GITHUB_TOKEN")
+        // Check project properties first (supports gradle.properties and -P flags) with multiple common keys
+        val propKeys = listOf("GITHUB_TOKEN", "githubToken", "github.token", "GH_TOKEN", "ghToken")
+        var token: String? = null
+        for (k in propKeys) {
+            val v = project.findProperty(k) as? String
+            if (!v.isNullOrBlank()) { token = v.trim(); break }
+        }
+
+        // Fallback to environment variables
         if (token.isNullOrBlank()) {
-            throw IllegalStateException("GITHUB_TOKEN is required for Kotlin-native automation tasks. Set env or -PGITHUB_TOKEN.")
+            token = System.getenv("GITHUB_TOKEN") ?: System.getenv("GH_TOKEN") ?: System.getenv("github_token")
+        }
+
+        // Finally, try user's ~/.gradle/gradle.properties for convenience in CI/machine config
+        if (token.isNullOrBlank()) {
+            try {
+                val home = System.getProperty("user.home") ?: ""
+                val f = java.io.File(home, ".gradle/gradle.properties")
+                if (f.exists()) {
+                    val props = java.util.Properties()
+                    f.inputStream().use { props.load(it) }
+                    for (k in propKeys) {
+                        val v = props.getProperty(k)
+                        if (!v.isNullOrBlank()) { token = v.trim(); break }
+                    }
+                }
+            } catch (_: Exception) {
+                // ignore
+            }
+        }
+
+        if (token.isNullOrBlank()) {
+            throw IllegalStateException("GITHUB_TOKEN is required for Kotlin-native automation tasks. Provide it via gradle.properties (GITHUB_TOKEN=...), -PGITHUB_TOKEN=..., or environment variable GH_TOKEN/GITHUB_TOKEN.")
         }
         return GitHub.connectUsingOAuth(token)
     }
