@@ -100,9 +100,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Prune local branches on runner (dry-run unless PRUNE_LOCAL_BRANCHES secret=true)
-        run: ./gradlew githubPruneLocalBranches
+        run: ./gradlew githubRemoveLocalObsoleteBranches
         env:
-          PRUNE_MODE: ${{ secrets.PRUNE_LOCAL_BRANCHES != '' && secrets.PRUNE_LOCAL_BRANCHES || 'true' }}
+          PRUNE_LOCAL_MODE: ${{ secrets.PRUNE_LOCAL_BRANCHES != '' && secrets.PRUNE_LOCAL_BRANCHES || 'true' }}
+          PRUNE_LOCAL_DAYS: ${{ secrets.PRUNE_LOCAL_DAYS != '' && secrets.PRUNE_LOCAL_DAYS || '90' }}
           MAIN_RESET_CONFIRM: ${{ secrets.MAIN_RESET_CONFIRM != '' && secrets.MAIN_RESET_CONFIRM || 'true' }}
           FORCE_PUSH_CONFIRM: ${{ secrets.FORCE_PUSH_CONFIRM != '' && secrets.FORCE_PUSH_CONFIRM || 'true' }}
           GH_SKIP_AUTH_CHECK: ${{ secrets.GH_SKIP_AUTH_CHECK != '' && secrets.GH_SKIP_AUTH_CHECK || 'true' }}
