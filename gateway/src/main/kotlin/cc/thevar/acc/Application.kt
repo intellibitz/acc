@@ -44,8 +44,8 @@ fun main() {
     logger.info("Detected Project Root: {}", projectRoot.absolutePath)
 
     val keyStoreFile = File(projectRoot, "config/keystore.p12")
-    val httpPort = 8333
-    val httpsPort = 8334
+    val httpPort = System.getenv("ACC_HTTP_PORT")?.toIntOrNull() ?: 8333
+    val httpsPort = System.getenv("ACC_HTTPS_PORT")?.toIntOrNull() ?: 8334
 
     embeddedServer(Netty, configure = {
         connector {

@@ -4,6 +4,13 @@ Developer onboarding and automation notes
 > **ALL Git and GitHub tasks MUST be performed via Gradle tasks ONLY.**
 > Every ACC creator (AI agents, human developers, and contributors) must execute GitHub operations using the Gradle automation tasks (`./gradlew githubSync`, `./gradlew githubPR`, `./gradlew githubMerge`, etc.). Manual `git` and `gh` workflow commands are strictly prohibited.
 
+### 📌 ACC Dedicated Port Rule & Policy
+> **MANDATORY PORT ASSIGNMENTS:**
+> - **`8333`** — ACC Gateway HTTP Server & Production Web UI
+> - **`8334`** — ACC Gateway HTTPS Secure Server
+> - **`8335`** — ACC Standalone Web Development Server (Wasm/JS Dev)
+> Do NOT use generic ports like 8080, 8081, or 8443.
+
 This project provides CI and local automation for repository maintenance. Key docs:
 
 - GitHub automation: docs/github-automation.md
