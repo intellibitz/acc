@@ -63,10 +63,17 @@ We use a modular automation engine in [github-automation.gradle.kts](github-auto
   - `githubChecks`: Watches CI progress for the current branch.
   - `githubFixAll`: Attempts to fix failed PRs by updating branches and rerunning CI.
 
+### 📌 ACC Dedicated Port Rule & Policy
+> **MANDATORY RULE:** All ACC components MUST use dedicated, unique non-conflicting ports:
+> - **`8333`** — ACC Gateway HTTP Server & Web UI (`http://localhost:8333`)
+> - **`8334`** — ACC Gateway HTTPS Secure Server (`https://localhost:8334`)
+> - **`8335`** — ACC Standalone Web Development Server (Wasm/JS Dev) (`http://localhost:8335`)
+> Components, ViewModels, and documentation MUST adhere to these exact ports and MUST NOT fall back to generic ports (`8080`, `8081`, `8443`).
+
 ### Deployment for Pilots:
 Users can simply download the `acc-gateway-x.y.z.jar` from the GitHub Release and run:
 `java -jar acc-gateway-x.y.z.jar`
-The server and web frontend will be served at `http://localhost:8080`.
+The server and web frontend will be served at `http://localhost:8333`.
 
 ## 🛠️ Development Guidelines
 - **Koin first**: Avoid global singletons. Inject dependencies via constructors or Koin DSL.
