@@ -15,7 +15,7 @@ buildscript {
             classpath("org.apache.httpcomponents.client5:httpclient5:5.6.3") {
                 because("CVE-2026-64607")
             }
-            classpath("com.fasterxml.jackson.core:jackson-databind:2.18.9") {
+            classpath("com.fasterxml.jackson.core:jackson-databind:2.22.2") {
                 because("CVE-2026-54512, CVE-2026-59889, CVE-2026-54515")
             }
             classpath("io.opentelemetry:opentelemetry-api:1.62.0") {
