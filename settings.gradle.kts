@@ -11,10 +11,10 @@ pluginManagement {
 buildscript {
     dependencies {
         constraints {
-            classpath("org.bouncycastle:bcprov-jdk18on:1.84") {
+            classpath("org.bouncycastle:bcprov-jdk18on:1.85.2") {
                 because("CVE-2024-34447")
             }
-            classpath("org.bouncycastle:bcpkix-jdk18on:1.84") {
+            classpath("org.bouncycastle:bcpkix-jdk18on:1.85.2") {
                 because("CVE-2026-5588")
             }
             classpath("io.netty:netty-codec-http:4.2.17.Final") {
